@@ -25,7 +25,6 @@ public class JavaxAudioRenderer implements AudioRenderer {
 	private int sampleRate;
 	private boolean reallocateLines;
 	
-	public static final int DEFAULT_BUFFER_SIZE = 0;
 	public static final int STARING_BUFFER_SIZE = 4096;
 	public static final int STAGING_BUFFERS = 3; // 3 complete frames of audio
 	
@@ -35,6 +34,7 @@ public class JavaxAudioRenderer implements AudioRenderer {
 	 * @param offset the offset at which the data starts in the array
 	 * @param length the length of data to be rendered
 	 */
+	@Override
 	public void playDecodedAudio(byte[] pcmData, int offset, int length) {
 		if (soundLine != null) {
 			// Queue the decoded samples into the staging sound buffer
@@ -74,6 +74,7 @@ public class JavaxAudioRenderer implements AudioRenderer {
 	/**
 	 * Callback for when the stream session is closing and the audio renderer should stop.
 	 */
+	@Override
 	public void streamClosing() {
 		if (soundLine != null) {
 			soundLine.close();
@@ -83,25 +84,12 @@ public class JavaxAudioRenderer implements AudioRenderer {
 	private boolean createSoundLine(int bufferSize) {
 		AudioFormat audioFormat = new AudioFormat(sampleRate, 16, channelCount, true, ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN);
 		
-		DataLine.Info info;
-		
-		if (bufferSize == DEFAULT_BUFFER_SIZE) {
-			info = new DataLine.Info(SourceDataLine.class, audioFormat);
-		}
-		else {
-			info = new DataLine.Info(SourceDataLine.class, audioFormat, bufferSize);
-		}
-		
+		DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat, bufferSize);
+
 		try {
 			soundLine = (SourceDataLine) AudioSystem.getLine(info);
-			
-			if (bufferSize == DEFAULT_BUFFER_SIZE) {
-				soundLine.open(audioFormat);
-			}
-			else {
-				soundLine.open(audioFormat, bufferSize);
-			}
-			
+			soundLine.open(audioFormat, bufferSize);
+
 			soundLine.start();
 			lineBuffer = new byte[soundLine.getBufferSize()];
 			soundBuffer = new SoundBuffer(STAGING_BUFFERS);
@@ -119,27 +107,20 @@ public class JavaxAudioRenderer implements AudioRenderer {
 	 * @param samplesPerFrame the number of 16-bit samples per audio frame
 	 * @param sampleRate the sample rate for the audio.
 	 */
+	@Override
 	public boolean streamInitialized(int channelCount, int channelMask, int samplesPerFrame, int sampleRate) {
 		this.channelCount = channelCount;
 		this.sampleRate = sampleRate;
 		
-		// Workaround OS X's bad Java mixer
-		if (System.getProperty("os.name").contains("Mac OS X")) {
-			if (!createSoundLine(STARING_BUFFER_SIZE)) {
-				return false;
-			}
-			reallocateLines = true;
+		if (!createSoundLine(STARING_BUFFER_SIZE)) {
+			return false;
 		}
-		else {
-			if (!createSoundLine(DEFAULT_BUFFER_SIZE)) {
-				return false;
-			}
-			reallocateLines = false;
-		}
-		
+		reallocateLines = true;
+
 		return true;
 	}
 
+	@Override
 	public int getCapabilities() {
 		return 0;
 	}

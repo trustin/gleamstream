@@ -1,7 +1,5 @@
 package com.limelight;
 
-import java.io.File;
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
@@ -10,7 +8,6 @@ import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
-import com.limelight.binding.LibraryHelper;
 import com.limelight.binding.PlatformBinding;
 import com.limelight.gui.MainFrame;
 import com.limelight.gui.StreamFrame;
@@ -25,7 +22,6 @@ import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.settings.PreferencesManager;
-import com.limelight.settings.SettingsManager;
 import com.limelight.settings.PreferencesManager.Preferences;
 import com.limelight.settings.PreferencesManager.Preferences.Resolution;
 
@@ -36,10 +32,9 @@ import com.limelight.settings.PreferencesManager.Preferences.Resolution;
  * Cameron Gutman
  */
 public class Limelight implements NvConnectionListener {
-	public static final double VERSION = 1.0;
-	public static boolean COMMAND_LINE_LAUNCH = false;
+	public static boolean COMMAND_LINE_LAUNCH;
 
-	private String host;
+	private final String host;
 	private StreamFrame streamFrame;
 	private NvConnection conn;
 	private boolean connectionTerminating;
@@ -95,6 +90,7 @@ public class Limelight implements NvConnectionListener {
 		.setResolution(res.width, res.height)
 		.setRefreshRate(res.frameRate)
 		.setBitrate(bitRate*1000)
+		//.setHevcSupported(true)
 		.enableLocalAudioPlayback(localAudio)
 		.build();
 	}
@@ -121,27 +117,9 @@ public class Limelight implements NvConnectionListener {
 	 * @return Error message or null for success
 	 */
 	public static String loadNativeLibraries() {
-		String errorMessage;
-
-		try {
-			String libraryPlatform = LibraryHelper.getLibraryPlatformString();
-			String jrePlatform = LibraryHelper.getRunningPlatformString();
-
-			if (libraryPlatform.equals(jrePlatform)) {
-				// Success path
-				LibraryHelper.prepareNativeLibraries();
-				NativeGamepad.addListener(GamepadListener.getInstance());
-				NativeGamepad.start();
-				return null;
-			}
-			else {
-				errorMessage = "This is not the correct JAR for your platform. Please download the \""+jrePlatform+"\" JAR.";
-			}
-		} catch (IOException e) {
-			errorMessage = "The JAR is malformed or an invalid native library path was specified.";
-		}
-
-		return errorMessage;
+		// Success path
+		NativeGamepad.start();
+		return null;
 	}
 
 	/**
@@ -162,15 +140,7 @@ public class Limelight implements NvConnectionListener {
 	 * Does some initializations and then creates the main frame.
 	 * @param args unused.
 	 */
-	public static void main(String args[]) {
-		// Redirect logging to a file if we're running from a JAR
-		if (LibraryHelper.isRunningFromJar() && args.length == 0) {
-			try {
-				LimeLog.setFileHandler(SettingsManager.SETTINGS_DIR + File.separator + "limelight.log");
-			} catch (IOException e) {
-			}
-		}
-		
+	public static void main(String[] args) {
 		// Native look and feel for all platforms
 		try {
 			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -305,7 +275,7 @@ public class Limelight implements NvConnectionListener {
 
 		// Remove the gamepad listener
 		if (gamepad != null) {
-			GamepadListener.getInstance().removeListener(gamepad);
+			GamepadListener.removeListener(gamepad);
 		}
 		
 		int endToEndLatency = decoderRenderer.getAverageEndToEndLatency();
@@ -322,6 +292,7 @@ public class Limelight implements NvConnectionListener {
 	 * Callback to specify which stage is starting. Used to update UI.
 	 * @param stage the Stage that is starting
 	 */
+	@Override
 	public void stageStarting(Stage stage) {
 		LimeLog.info("Starting "+stage.getName());
 		streamFrame.showSpinner(stage);
@@ -332,6 +303,7 @@ public class Limelight implements NvConnectionListener {
 	 * <br><b>NOTE: Currently unimplemented.</b>
 	 * @param stage the Stage that has finished.
 	 */
+	@Override
 	public void stageComplete(Stage stage) {
 	}
 
@@ -339,6 +311,7 @@ public class Limelight implements NvConnectionListener {
 	 * Callback that a stage has failed. Used to inform user that an error occurred.
 	 * @param stage the Stage that was loading when the error occurred
 	 */
+	@Override
 	public void stageFailed(Stage stage) {
 		stop();
 		displayError("Connection Error", "Starting " + stage.getName() + " failed");
@@ -347,11 +320,12 @@ public class Limelight implements NvConnectionListener {
 	/**
 	 * Callback that the connection has finished loading and is started.
 	 */
+	@Override
 	public void connectionStarted() {
 		streamFrame.hideSpinner();
 
 		gamepad = new GamepadHandler(conn);
-		GamepadListener.getInstance().addDeviceListener(gamepad);
+		GamepadListener.addDeviceListener(gamepad);
 	}
 
 	/**
@@ -359,6 +333,7 @@ public class Limelight implements NvConnectionListener {
 	 * <br>This is were the stream shutdown procedure takes place.
 	 * @param e the Exception that was thrown- probable cause of termination.
 	 */
+	@Override
 	public void connectionTerminated(Exception e) {
 		if (!(e instanceof InterruptedException)) {
 			e.printStackTrace();
@@ -369,11 +344,7 @@ public class Limelight implements NvConnectionListener {
 			// Spin off a new thread to update the UI since
 			// this thread has been interrupted and will terminate
 			// shortly
-			new Thread(new Runnable() {
-				public void run() {
-					displayError("Connection Terminated", "The connection failed unexpectedly");
-				}
-			}).start();
+			new Thread(() -> displayError("Connection Terminated", "The connection failed unexpectedly")).start();
 		}
 	}
 
@@ -396,12 +367,8 @@ public class Limelight implements NvConnectionListener {
 					final String pinStr = PairingManager.generatePinString();
 					
 					// Spin the dialog off in a thread because it blocks
-					new Thread(new Runnable() {
-						public void run() {
-							Limelight.displayUiMessage(null, "Please enter the following PIN on the target PC: "+pinStr,
-									"Moonlight", JOptionPane.INFORMATION_MESSAGE);
-						}
-					}).start();
+					new Thread(() -> displayUiMessage(null, "Please enter the following PIN on the target PC: " + pinStr,
+                                              "Moonlight", JOptionPane.INFORMATION_MESSAGE)).start();
 					
 					PairingManager.PairState pairState = httpConn.pair(serverInfo, pinStr);
 					if (pairState == PairingManager.PairState.PIN_WRONG) {
@@ -433,6 +400,7 @@ public class Limelight implements NvConnectionListener {
 	 * Displays a message to the user
 	 * @param message the message to show the user
 	 */
+	@Override
 	public void displayMessage(String message) {
 		streamFrame.dispose();
 		displayUiMessage(limeFrame, message, "Moonlight", JOptionPane.INFORMATION_MESSAGE);
@@ -448,6 +416,7 @@ public class Limelight implements NvConnectionListener {
 		displayUiMessage(limeFrame, message, title, JOptionPane.ERROR_MESSAGE);
 	}
 
+	@Override
 	public void displayTransientMessage(String message) {
 		// FIXME: Implement transient GUI messages
 		LimeLog.info(message);

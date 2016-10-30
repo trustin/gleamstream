@@ -75,10 +75,10 @@ public class AppsFrame extends JFrame {
 
                     quitButton.setEnabled(false);
                     for (NvApp app : fetched) {
-                    	if (app.getIsRunning()) {
-                            appSelector.setSelectedItem(app.getAppName());
-                            quitButton.setEnabled(true);
-                    	}
+//                    	if (app.getIsRunning()) {
+//                            appSelector.setSelectedItem(app.getAppName());
+//                            quitButton.setEnabled(true);
+//                    	}
                     }
                 } catch (InterruptedException e) {
                     LimeLog.warning("Failed to get list of apps; interrupted by " + e);
@@ -124,12 +124,12 @@ public class AppsFrame extends JFrame {
             public void itemStateChanged(ItemEvent e) {
                 if (e.getStateChange() == ItemEvent.SELECTED && appSelector.getSelectedIndex() != -1) {
                 	NvApp app = apps.get(appSelector.getSelectedItem());
-                    if (app.getIsRunning()) {
-                    	launchButton.setText("Resume");
-                    }
-                    else {
+//                    if (app.getIsRunning()) {
+//                    	launchButton.setText("Resume");
+//                    }
+//                    else {
                     	launchButton.setText("Launch");
-                    }
+//                    }
                 }
             }
         });

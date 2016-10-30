@@ -23,7 +23,7 @@ public abstract class CapturingCpuDecoder extends AbstractCpuDecoder {
 	}
 	
 	@Override
-	public boolean submitDecodeUnit(DecodeUnit decodeUnit) {
+	public void submitDecodeUnit(DecodeUnit decodeUnit) {
 		for (ByteBufferDescriptor bbd = decodeUnit.getBufferHead();
 				bbd != null; bbd = bbd.nextDescriptor) {
 			try {
@@ -33,7 +33,7 @@ public abstract class CapturingCpuDecoder extends AbstractCpuDecoder {
 			}
 		}
 		
-		return super.submitDecodeUnit(decodeUnit);
+		super.submitDecodeUnit(decodeUnit);
 	}
 	
 	@Override
