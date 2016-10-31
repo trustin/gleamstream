@@ -1,14 +1,14 @@
 package com.limelight.binding;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 import com.limelight.binding.audio.JavaxAudioRenderer;
 import com.limelight.binding.crypto.PcCryptoProvider;
 import com.limelight.binding.video.GLDecoderRenderer;
 import com.limelight.nvstream.av.audio.AudioRenderer;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.http.LimelightCryptoProvider;
-
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 
 /**
  * Used for platform-specific video/audio bindings.
@@ -22,7 +22,7 @@ public class PlatformBinding {
      * @return a video decoder and renderer
      */
     public static VideoDecoderRenderer getVideoDecoderRenderer() {
-    	return new GLDecoderRenderer();
+        return new GLDecoderRenderer();
     }
 
     /**

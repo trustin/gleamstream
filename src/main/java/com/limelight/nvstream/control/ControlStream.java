@@ -356,7 +356,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                     int[] lastTuple = null;
                     if (tuple[0] != 0 || tuple[1] != 0) {
                         // Aggregate all lost frames into one range
-                        for (; ; ) {
+                        for (;;) {
                             int[] nextTuple = lastTuple = invalidReferenceFrameTuples.poll();
                             if (nextTuple == null) {
                                 break;

@@ -1,12 +1,12 @@
 package com.limelight.input;
 
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+
 import com.limelight.LimeLog;
 import com.limelight.gui.StreamFrame;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.KeyboardPacket;
-
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 
 /**
  * Class that handles keyboard input
@@ -34,7 +34,7 @@ public class KeyboardHandler implements KeyListener {
      * @param event the key-down event
      */
     public void keyPressed(KeyEvent event) {
-        if (event.isConsumed()) return;
+        if (event.isConsumed()) { return; }
         event.consume();
 
         short keyMap = translator.translate(event.getKeyCode());
@@ -57,11 +57,11 @@ public class KeyboardHandler implements KeyListener {
             (modifiers & KeyEvent.CTRL_DOWN_MASK) != 0 &&
             event.getKeyCode() == KeyEvent.VK_Q) {
             LimeLog.info("quitting");
-            
+
             // Free mouse before closing to avoid the mouse code
             // trying to interact with the now closed streaming window.
             parent.freeMouse();
-            
+
             parent.close();
             return;
         } else if (
@@ -77,8 +77,6 @@ public class KeyboardHandler implements KeyListener {
             return;
         }
 
-
-
         translator.sendKeyDown(keyMap, modifier);
     }
 
@@ -87,7 +85,7 @@ public class KeyboardHandler implements KeyListener {
      * @param event the key-up event
      */
     public void keyReleased(KeyEvent event) {
-        if (event.isConsumed()) return;
+        if (event.isConsumed()) { return; }
         event.consume();
 
         short keyMap = translator.translate(event.getKeyCode());

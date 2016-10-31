@@ -14,7 +14,7 @@ import com.limelight.utils.TimeHelper;
 public class VideoDepacketizer {
 
     // Current frame state
-	private int frameDataLength = 0;
+    private int frameDataLength = 0;
     private ByteBufferDescriptor frameDataChainHead;
     private ByteBufferDescriptor frameDataChainTail;
     private VideoPacket backingPacketHead;
@@ -543,7 +543,7 @@ class NAL {
 
     // This assumes that the buffer passed in is already a special sequence
     public static boolean isAnnexBFrameStart(ByteBufferDescriptor specialSeq) {
-		if (specialSeq.length != 4) { return false; }
+        if (specialSeq.length != 4) { return false; }
 
         // The frame start sequence is 00 00 00 01
         return (specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x01);
@@ -559,7 +559,7 @@ class NAL {
     public static boolean getSpecialSequenceDescriptor(ByteBufferDescriptor buffer,
                                                        ByteBufferDescriptor outputDesc) {
         // NAL start sequence is 00 00 00 01 or 00 00 01
-		if (buffer.length < 3) { return false; }
+        if (buffer.length < 3) { return false; }
 
         // 00 00 is magic
         if (buffer.data[buffer.offset] == 0x00 &&
@@ -588,7 +588,7 @@ class NAL {
                 // byte to see whether it's 00, 01, 02, or 03 (a valid RBSP substitution)
                 // or whether it's something else
 
-				if (buffer.length < 4) { return false; }
+                if (buffer.length < 4) { return false; }
 
                 if (buffer.data[buffer.offset + 3] >= 0x00 &&
                     buffer.data[buffer.offset + 3] <= 0x03) {

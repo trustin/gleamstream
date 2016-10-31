@@ -98,7 +98,7 @@ public class GLDecoderRenderer extends AbstractCpuDecoder implements GLEventList
         glcanvas.setCursor(frame.getCursor());
 
         animator = new FPSAnimator(glcanvas, targetFps * 2);
-        
+
         LimeLog.info("Using OpenGL rendering");
 
         return true;

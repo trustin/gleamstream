@@ -1,9 +1,9 @@
 package com.limelight.input;
 
+import java.awt.event.KeyEvent;
+
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.KeycodeTranslator;
-
-import java.awt.event.KeyEvent;
 
 /**
  * Class to translate a java key code into the codes GFE is expecting

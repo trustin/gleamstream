@@ -13,11 +13,11 @@ public class AudioDepacketizer {
     private AbstractPopulatedBufferList<ByteBufferDescriptor> decodedUnits;
 
     // Direct submit state
-    private AudioRenderer directSubmitRenderer;
+    private final AudioRenderer directSubmitRenderer;
     private byte[] directSubmitData;
 
     // Cached objects
-    private ByteBufferDescriptor cachedDesc = new ByteBufferDescriptor(null, 0, 0);
+    private final ByteBufferDescriptor cachedDesc = new ByteBufferDescriptor(null, 0, 0);
 
     // Sequencing state
     private short lastSequenceNumber;
@@ -25,24 +25,22 @@ public class AudioDepacketizer {
     public AudioDepacketizer(AudioRenderer directSubmitRenderer, final int bufferSizeShorts) {
         this.directSubmitRenderer = directSubmitRenderer;
         if (directSubmitRenderer != null) {
-            this.directSubmitData = new byte[bufferSizeShorts * 2];
+            directSubmitData = new byte[bufferSizeShorts * 2];
         } else {
-            decodedUnits = new AtomicPopulatedBufferList<ByteBufferDescriptor>(DU_LIMIT,
-                                                                               new AbstractPopulatedBufferList.BufferFactory() {
-                                                                                   public Object createFreeBuffer() {
-                                                                                       return new ByteBufferDescriptor(
-                                                                                               new byte[
-                                                                                                       bufferSizeShorts
-                                                                                                       * 2], 0,
-                                                                                               bufferSizeShorts
-                                                                                               * 2);
-                                                                                   }
+            decodedUnits = new AtomicPopulatedBufferList<>(
+                    DU_LIMIT,
+                    new AbstractPopulatedBufferList.BufferFactory() {
+                        @Override
+                        public Object createFreeBuffer() {
+                            return new ByteBufferDescriptor(
+                                    new byte[bufferSizeShorts * 2], 0, bufferSizeShorts * 2);
+                        }
 
-                                                                                   public void cleanupObject(
-                                                                                           Object o) {
-                                                                                       // Nothing to do
-                                                                                   }
-                                                                               });
+                        @Override
+                        public void cleanupObject(Object o) {
+                            // Nothing to do
+                        }
+                    });
         }
     }
 

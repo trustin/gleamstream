@@ -48,7 +48,6 @@ public final class NativeLibraries {
                         out.write(buf, 0, numBytes);
                     }
                 }
-
             } catch (IOException e) {
                 throw new IllegalStateException(
                         "cannot write a temporary file for a native library: " + resourcePath, e);

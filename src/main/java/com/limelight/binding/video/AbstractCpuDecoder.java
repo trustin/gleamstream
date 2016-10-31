@@ -75,21 +75,22 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
      * @param drFlags flags for the decoder and renderer
      */
     @Override
-    public boolean setup(VideoFormat format, int width, int height, int redrawRate, Object renderTarget, int drFlags) {
+    public boolean setup(VideoFormat format, int width, int height, int redrawRate, Object renderTarget,
+                         int drFlags) {
         this.width = width;
         this.height = height;
         targetFps = redrawRate;
 
         final AVCodec codec;
         switch (format) {
-        case H264:
-            codec = avcodec_find_decoder(AV_CODEC_ID_H264);
-            break;
-        case H265:
-            codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);
-            break;
-        default:
-            return false;
+            case H264:
+                codec = avcodec_find_decoder(AV_CODEC_ID_H264);
+                break;
+            case H265:
+                codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);
+                break;
+            default:
+                return false;
         }
 
         LimeLog.info("Video codec: " + codec.name().getString());
@@ -183,7 +184,8 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
         if (decoderBuffer.capacity() < decodeUnit.getDataLength() + AV_INPUT_BUFFER_PADDING_SIZE) {
             int newCapacity = (int) (1.15f * decodeUnit.getDataLength()) + AV_INPUT_BUFFER_PADDING_SIZE;
             LimeLog.info(
-                    "Reallocating decoder buffer from " + decoderBuffer.capacity() + " to " + newCapacity + " bytes");
+                    "Reallocating decoder buffer from " + decoderBuffer.capacity() + " to " + newCapacity
+                    + " bytes");
 
             decoderBuffer = ByteBuffer.allocateDirect(newCapacity);
         }

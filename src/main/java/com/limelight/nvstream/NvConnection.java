@@ -27,7 +27,7 @@ import com.limelight.nvstream.input.ControllerStream;
 import com.limelight.nvstream.rtsp.RtspConnection;
 
 public class NvConnection {
-	// Context parameters
+    // Context parameters
     private String host;
     private LimelightCryptoProvider cryptoProvider;
     private String uniqueId;
@@ -382,19 +382,19 @@ public class NvConnection {
     }
 
     public void sendMouseMove(final short deltaX, final short deltaY) {
-		if (inputStream == null) { return; }
+        if (inputStream == null) { return; }
 
         inputStream.sendMouseMove(deltaX, deltaY);
     }
 
     public void sendMouseButtonDown(final byte mouseButton) {
-		if (inputStream == null) { return; }
+        if (inputStream == null) { return; }
 
         inputStream.sendMouseButtonDown(mouseButton);
     }
 
     public void sendMouseButtonUp(final byte mouseButton) {
-		if (inputStream == null) { return; }
+        if (inputStream == null) { return; }
 
         inputStream.sendMouseButtonUp(mouseButton);
     }
@@ -404,7 +404,7 @@ public class NvConnection {
                                     final byte leftTrigger, final byte rightTrigger,
                                     final short leftStickX, final short leftStickY,
                                     final short rightStickX, final short rightStickY) {
-		if (inputStream == null) { return; }
+        if (inputStream == null) { return; }
 
         inputStream.sendControllerInput(controllerNumber, buttonFlags, leftTrigger,
                                         rightTrigger, leftStickX, leftStickY,
@@ -415,7 +415,7 @@ public class NvConnection {
                                     final byte leftTrigger, final byte rightTrigger,
                                     final short leftStickX, final short leftStickY,
                                     final short rightStickX, final short rightStickY) {
-		if (inputStream == null) { return; }
+        if (inputStream == null) { return; }
 
         inputStream.sendControllerInput(buttonFlags, leftTrigger,
                                         rightTrigger, leftStickX, leftStickY,
@@ -423,13 +423,13 @@ public class NvConnection {
     }
 
     public void sendKeyboardInput(final short keyMap, final byte keyDirection, final byte modifier) {
-		if (inputStream == null) { return; }
+        if (inputStream == null) { return; }
 
         inputStream.sendKeyboardInput(keyMap, keyDirection, modifier);
     }
 
     public void sendMouseScroll(final byte scrollClicks) {
-		if (inputStream == null) { return; }
+        if (inputStream == null) { return; }
 
         inputStream.sendMouseScroll(scrollClicks);
     }

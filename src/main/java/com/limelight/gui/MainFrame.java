@@ -6,10 +6,16 @@ import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
+import java.awt.event.KeyEvent;
+import java.net.InetAddress;
+import java.util.HashMap;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -17,6 +23,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 
 import com.limelight.LimeLog;
 import com.limelight.Limelight;
@@ -26,14 +33,6 @@ import com.limelight.nvstream.mdns.MdnsDiscoveryListener;
 import com.limelight.settings.PreferencesManager;
 import com.limelight.settings.PreferencesManager.Preferences;
 
-import javax.swing.*;
-
-import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
-import java.awt.event.KeyEvent;
-import java.net.InetAddress;
-import java.util.HashMap;
-
 /**
  * The main frame of Moonlight that allows the user to specify the host and begin the stream.
  *
@@ -41,91 +40,93 @@ import java.util.HashMap;
  *         <br>Cameron Gutman
  */
 public class MainFrame {
-	private JTextField hostField;
-	private JButton pair;
-	private JButton stream;
-	private JFrame limeFrame;
-	private JComboBox<String> mdnsHostList;
+    private JTextField hostField;
+    private JButton pair;
+    private JButton stream;
+    private JFrame limeFrame;
+    private JComboBox<String> mdnsHostList;
 
     private HashMap<String, InetAddress> mdnsHosts;
     private MdnsDiscoveryAgent mdnsAgent;
 
-	/**
-	 * Gets the actual JFrame this class creates
-	 * @return the JFrame that is the main frame
-	 */
-	public JFrame getLimeFrame() {
-		return limeFrame;
-	}
+    /**
+     * Gets the actual JFrame this class creates
+     * @return the JFrame that is the main frame
+     */
+    public JFrame getLimeFrame() {
+        return limeFrame;
+    }
 
-	/*
-	 * Creates the menu bar for the user to go to preferences, mappings, etc.
-	 */
-	private JMenuBar createMenuBar() {
-		JMenuBar menuBar = new JMenuBar();
-		JMenu optionsMenu = new JMenu("Options");
-		JMenuItem gamepadSettings = new JMenuItem("Gamepad Settings");
-		JMenuItem generalSettings = new JMenuItem("Preferences");
-		generalSettings.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, (Toolkit.getDefaultToolkit().getMenuShortcutKeyMask())));
-		
-		gamepadSettings.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				new GamepadConfigFrame().build();
-			}
-		});
+    /*
+     * Creates the menu bar for the user to go to preferences, mappings, etc.
+     */
+    private JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        JMenu optionsMenu = new JMenu("Options");
+        JMenuItem gamepadSettings = new JMenuItem("Gamepad Settings");
+        JMenuItem generalSettings = new JMenuItem("Preferences");
+        generalSettings.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, (Toolkit.getDefaultToolkit()
+                                                                                         .getMenuShortcutKeyMask())));
 
-		generalSettings.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				new PreferencesFrame().build();
-			}
-		});
+        gamepadSettings.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                new GamepadConfigFrame().build();
+            }
+        });
 
-		optionsMenu.add(gamepadSettings);
-		optionsMenu.add(generalSettings);
+        generalSettings.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                new PreferencesFrame().build();
+            }
+        });
 
-		menuBar.add(optionsMenu);
+        optionsMenu.add(gamepadSettings);
+        optionsMenu.add(generalSettings);
 
-		return menuBar;
-	}
+        menuBar.add(optionsMenu);
 
-	/*
-	 * Creates the listener for the stream button- starts the stream process
-	 */
-	private ActionListener createStreamButtonListener() {
-		return new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				String host = hostField.getText();
-				Preferences prefs = PreferencesManager.getPreferences();
-				if (!host.equals(prefs.getHost())) {
-					prefs.setHost(host);
-					PreferencesManager.writePreferences(prefs);
-				}
-				// Limelight.createInstance(host);
-				showApps();
-			}
-		};
-	}
+        return menuBar;
+    }
 
-	/*
-	 * Creates the listener for the pair button- requests a pairing with the specified host
-	 */
-	private ActionListener createPairButtonListener() {
-		return new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				new Thread(new Runnable() {
-					public void run() {
-						Preferences prefs = PreferencesManager.getPreferences();
-						
-						// Save preferences to preserve possibly new unique ID
-						PreferencesManager.writePreferences(prefs);
-						
-						String msg = Limelight.pair(prefs.getUniqueId(), hostField.getText());
-						Limelight.displayUiMessage(limeFrame, msg, "Moonlight", JOptionPane.INFORMATION_MESSAGE);
-					}
-				}).start();
-			}
-		};
-	}
+    /*
+     * Creates the listener for the stream button- starts the stream process
+     */
+    private ActionListener createStreamButtonListener() {
+        return new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String host = hostField.getText();
+                Preferences prefs = PreferencesManager.getPreferences();
+                if (!host.equals(prefs.getHost())) {
+                    prefs.setHost(host);
+                    PreferencesManager.writePreferences(prefs);
+                }
+                // Limelight.createInstance(host);
+                showApps();
+            }
+        };
+    }
+
+    /*
+     * Creates the listener for the pair button- requests a pairing with the specified host
+     */
+    private ActionListener createPairButtonListener() {
+        return new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                new Thread(new Runnable() {
+                    public void run() {
+                        Preferences prefs = PreferencesManager.getPreferences();
+
+                        // Save preferences to preserve possibly new unique ID
+                        PreferencesManager.writePreferences(prefs);
+
+                        String msg = Limelight.pair(prefs.getUniqueId(), hostField.getText());
+                        Limelight.displayUiMessage(limeFrame, msg, "Moonlight",
+                                                   JOptionPane.INFORMATION_MESSAGE);
+                    }
+                }).start();
+            }
+        };
+    }
 
     /**
      * Builds all components of the frame, including the frame itself and displays it to the user.
@@ -159,28 +160,28 @@ public class MainFrame {
         mdnsHosts = new HashMap<String, InetAddress>();
         mdnsHostList = new JComboBox<String>();
         mdnsHostList.addItem("Choose a local PC...");
-        
+
         mdnsAgent = new MdnsDiscoveryAgent(new MdnsDiscoveryListener() {
-			@Override
-			public void notifyComputerAdded(MdnsComputer computer) {
+            @Override
+            public void notifyComputerAdded(MdnsComputer computer) {
                 if (!mdnsHosts.containsKey(computer.getName())) {
                     mdnsHosts.put(computer.getName(), computer.getAddress());
                     mdnsHostList.addItem(computer.getName());
                 }
-			}
+            }
 
-			@Override
-			public void notifyComputerRemoved(MdnsComputer computer) {
+            @Override
+            public void notifyComputerRemoved(MdnsComputer computer) {
                 // We'll keep any host we've seen before around, as users will find it convenient
-				LimeLog.info("Computer lost: "+computer.getName());
-			}
+                LimeLog.info("Computer lost: " + computer.getName());
+            }
 
-			@Override
-			public void notifyDiscoveryFailure(Exception e) {
-				LimeLog.warning("Discovery failure");
-				e.printStackTrace();
-			}
-        	
+            @Override
+            public void notifyDiscoveryFailure(Exception e) {
+                LimeLog.warning("Discovery failure");
+                e.printStackTrace();
+            }
+
         });
         mdnsAgent.startDiscovery(1000);
 
@@ -192,7 +193,6 @@ public class MainFrame {
                 }
             }
         });
-
 
         Box streamBox = Box.createHorizontalBox();
         streamBox.add(Box.createHorizontalGlue());
