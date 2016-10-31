@@ -5,6 +5,7 @@ mainClassName = "com.limelight.Limelight"
 applicationDefaultJvmArgs = [
         '-DGleamStream',
         '-server',
+        '-Xmx512m',
         '-XX:+UseG1GC',
         '-XX:+AggressiveOpts'
 ]
