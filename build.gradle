@@ -2,7 +2,12 @@ apply plugin: 'java'
 apply plugin: 'application'
 
 mainClassName = "com.limelight.Limelight"
-applicationDefaultJvmArgs = [ "-Dgleamstream" ]
+applicationDefaultJvmArgs = [
+        '-DGleamStream',
+        '-server',
+        '-XX:+UseG1GC',
+        '-XX:+AggressiveOpts'
+]
 
 ext.versionOf = { project.property("${it}.version") }
 
