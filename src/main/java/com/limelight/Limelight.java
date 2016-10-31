@@ -141,33 +141,32 @@ public class Limelight implements NvConnectionListener {
 	 * @param args unused.
 	 */
 	public static void main(String[] args) {
-		// Native look and feel for all platforms
 		try {
-			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-		} catch (ClassNotFoundException | InstantiationException | IllegalAccessException
-				| UnsupportedLookAndFeelException e) {
-		}
+			// Native look and feel for all platforms
+			try {
+				UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+			} catch (ClassNotFoundException | InstantiationException | IllegalAccessException
+					| UnsupportedLookAndFeelException e) {
+			}
 
-		//fix the menu bar if we are running in osx
-		if (System.getProperty("os.name").contains("Mac OS X")) {
-			// set the name of the application menu item (doesn't work on newer Oracle JDK)
-			System.setProperty("com.apple.mrj.application.apple.menu.about.name", "Moonlight");
-			// enables the osx-style menu bar
-			System.setProperty("apple.laf.useScreenMenuBar", "true");
-		}
+			//fix the menu bar if we are running in osx
+			if (System.getProperty("os.name").contains("Mac OS X")) {
+				// set the name of the application menu item (doesn't work on newer Oracle JDK)
+				System.setProperty("com.apple.mrj.application.apple.menu.about.name", "Moonlight");
+				// enables the osx-style menu bar
+				System.setProperty("apple.laf.useScreenMenuBar", "true");
+			}
 
-		String libraryError = loadNativeLibraries();
-
-		if (libraryError == null) {
+			loadNativeLibraries();
 			// launching with command line arguments
 			if (args.length == 0) {
 				createFrame();
-			}
-			else {
+			} else {
 				parseCommandLine(args);
 			}
-		} else {
-			displayUiMessage(null, libraryError, "Wrong JAR platform", JOptionPane.ERROR_MESSAGE);
+		} catch (Throwable t) {
+			t.printStackTrace();
+			System.exit(1);
 		}
 	}
 
