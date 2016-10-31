@@ -104,7 +104,7 @@ public class NvHTTP {
             public boolean verify(String hostname, SSLSession session) { return true; }
         };
 
-        httpClient.setConnectionPool(new ConnectionPool(0, 0));
+        httpClient.setConnectionPool(new ConnectionPool(0, 60000));
         httpClient.setHostnameVerifier(hv);
         httpClient.setConnectTimeout(CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS);
 

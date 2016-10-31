@@ -4,6 +4,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import com.limelight.utils.NativeLibraries;
+
 public class EnetConnection implements Closeable {
     private long enetPeer;
     private long enetClient;
@@ -11,7 +13,7 @@ public class EnetConnection implements Closeable {
     private static final int ENET_PACKET_FLAG_RELIABLE = 1;
 
     static {
-        System.loadLibrary("jnienet");
+        NativeLibraries.load("jnienet");
 
         initializeEnet();
     }

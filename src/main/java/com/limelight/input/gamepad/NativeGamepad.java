@@ -1,6 +1,7 @@
 package com.limelight.input.gamepad;
 
 import com.limelight.LimeLog;
+import com.limelight.utils.NativeLibraries;
 
 public final class NativeGamepad {
     public static final int DEFAULT_DEVICE_POLLING_ITERATIONS = 400;
@@ -13,7 +14,7 @@ public final class NativeGamepad {
     private static int pollingIntervalMs = DEFAULT_EVENT_POLLING_INTERVAL;
 
     static {
-        System.loadLibrary("gamepad_jni");
+        NativeLibraries.load("gamepad_jni");
     }
 
     private static native void init();

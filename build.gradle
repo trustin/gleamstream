@@ -1,0 +1,84 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = "com.limelight.Limelight"
+applicationDefaultJvmArgs = [ "-Dgleamstream" ]
+
+ext.versionOf = { project.property("${it}.version") }
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+configurations {
+    runtime
+    all*.exclude module: 'javacpp-presets'
+}
+
+dependencies {
+    // Bouncy Castle
+    compile "org.bouncycastle:bcpkix-jdk15on:${versionOf('bouncycastle')}"
+    // FastUtil
+    compile "it.unimi.dsi:fastutil:${versionOf('fastutil')}"
+    // FFmpeg
+    compile "org.bytedeco.javacpp-presets:ffmpeg:${versionOf('ffmpeg')}"
+    // GSON
+    compile "com.google.code.gson:gson:${versionOf('gson')}"
+    // JavaCPP
+    compile "org.bytedeco:javacpp:${versionOf('javacpp')}"
+    // JCTools
+    compile "org.jctools:jctools-core:${versionOf('jctools')}"
+    // jmDNS
+    compile "org.jmdns:jmdns:${versionOf('jmdns')}"
+    // JOGL
+    compile "org.jogamp.jogl:jogl-all:${versionOf('jogl')}"
+    compile "org.jogamp.gluegen:gluegen-rt:${versionOf('jogl')}"
+    // OkHttp2
+    compile "com.squareup.okhttp:okhttp:${versionOf('okhttp')}"
+    // OkIo
+    compile "com.squareup.okio:okio:${versionOf('okio')}"
+    // os-maven-plugin
+    compile("kr.motd.maven:os-maven-plugin:${versionOf('os-maven-plugin')}") {
+        exclude module: 'maven-plugin-api'
+        exclude module: 'maven-core'
+        exclude module: 'maven-plugin-annotations'
+        exclude module: 'plexus-utils'
+        exclude module: 'ui'
+    }
+    // SLF4J
+    compile "org.slf4j:slf4j-api:${versionOf('slf4j')}"
+    // TinyRTSP
+    compile files('lib/tinyrtsp.jar')
+    // XPP3
+    compile("org.ogce:xpp3:${versionOf('xpp3')}") {
+        exclude module: 'junit'
+        exclude module: 'jakarta-regexp'
+    }
+
+    // Native libraries
+    runtime "org.bytedeco.javacpp-presets:ffmpeg:${versionOf('ffmpeg')}:linux-x86"
+    runtime "org.jogamp.jogl:jogl-all:${versionOf('jogl')}:natives-linux-i586"
+    runtime "org.jogamp.gluegen:gluegen-rt:${versionOf('jogl')}:natives-linux-i586"
+    runtime "org.bytedeco.javacpp-presets:ffmpeg:${versionOf('ffmpeg')}:linux-x86_64"
+    runtime "org.jogamp.jogl:jogl-all:${versionOf('jogl')}:natives-linux-amd64"
+    runtime "org.jogamp.gluegen:gluegen-rt:${versionOf('jogl')}:natives-linux-amd64"
+    runtime "org.bytedeco.javacpp-presets:ffmpeg:${versionOf('ffmpeg')}:windows-x86"
+    runtime "org.jogamp.jogl:jogl-all:${versionOf('jogl')}:natives-windows-i586"
+    runtime "org.jogamp.gluegen:gluegen-rt:${versionOf('jogl')}:natives-windows-i586"
+    runtime "org.bytedeco.javacpp-presets:ffmpeg:${versionOf('ffmpeg')}:windows-x86_64"
+    runtime "org.jogamp.jogl:jogl-all:${versionOf('jogl')}:natives-windows-amd64"
+    runtime "org.jogamp.gluegen:gluegen-rt:${versionOf('jogl')}:natives-windows-amd64"
+    runtime "org.bytedeco.javacpp-presets:ffmpeg:${versionOf('ffmpeg')}:macosx-x86_64"
+    runtime "org.jogamp.jogl:jogl-all:${versionOf('jogl')}:natives-macosx-universal"
+    runtime "org.jogamp.gluegen:gluegen-rt:${versionOf('jogl')}:natives-macosx-universal"
+}
+
+// Require Java 8 to build the project.
+tasks.withType(JavaCompile) {
+    sourceCompatibility = '1.8'
+    targetCompatibility = '1.8'
+    options.encoding = 'UTF-8'
+    options.warnings = false
+    options.debug = true
+}
