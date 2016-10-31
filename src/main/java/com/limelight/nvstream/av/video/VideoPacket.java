@@ -21,7 +21,7 @@ public class VideoPacket implements RtpPacketFields {
 
     private short rtpSequenceNumber;
 
-    private AtomicInteger duAtomicRefCount = new AtomicInteger();
+    private final AtomicInteger duAtomicRefCount = new AtomicInteger();
     private int duRefCount;
 
     // Only for use in DecodeUnit for packet queuing
@@ -35,7 +35,7 @@ public class VideoPacket implements RtpPacketFields {
 
     public VideoPacket(byte[] buffer, boolean useAtomicRefCount) {
         this.buffer = new ByteBufferDescriptor(buffer, 0, buffer.length);
-        this.byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN);
+        byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN);
         this.useAtomicRefCount = useAtomicRefCount;
     }
 
@@ -46,7 +46,7 @@ public class VideoPacket implements RtpPacketFields {
         // No sequence number field is present in these packets
 
         // Read the video header fields
-        streamPacketIndex = (byteBuffer.getInt() >> 8) & 0xFFFFFF;
+        streamPacketIndex = byteBuffer.getInt() >> 8 & 0xFFFFFF;
         frameIndex = byteBuffer.getInt();
         flags = byteBuffer.getInt() & 0xFF;
 
@@ -62,13 +62,13 @@ public class VideoPacket implements RtpPacketFields {
         byteBuffer.position(2);
         rtpSequenceNumber = byteBuffer.getShort();
         rtpSequenceNumber =
-                (short) (((rtpSequenceNumber << 8) & 0xFF00) | (((rtpSequenceNumber >> 8) & 0x00FF)));
+                (short) (rtpSequenceNumber << 8 & 0xFF00 | rtpSequenceNumber >> 8 & 0x00FF);
 
         // Skip the rest of the RTP header
         byteBuffer.position(RtpPacket.MAX_HEADER_SIZE);
 
         // Read the video header fields
-        streamPacketIndex = (byteBuffer.getInt() >> 8) & 0xFFFFFF;
+        streamPacketIndex = byteBuffer.getInt() >> 8 & 0xFFFFFF;
         frameIndex = byteBuffer.getInt();
         flags = byteBuffer.getInt() & 0xFF;
 
@@ -95,19 +95,26 @@ public class VideoPacket implements RtpPacketFields {
         return buffer.data;
     }
 
+    public ByteBuffer getByteBuffer() {
+        return byteBuffer;
+    }
+
     public void initializePayloadDescriptor(ByteBufferDescriptor bb) {
         bb.reinitialize(buffer.data, buffer.offset + dataOffset, buffer.length - dataOffset);
     }
 
+    @Override
     public byte getPacketType() {
         // No consumers use this field so we don't look it up
         return -1;
     }
 
+    @Override
     public short getRtpSequenceNumber() {
         return rtpSequenceNumber;
     }
 
+    @Override
     public int referencePacket() {
         if (useAtomicRefCount) {
             return duAtomicRefCount.incrementAndGet();
@@ -116,6 +123,7 @@ public class VideoPacket implements RtpPacketFields {
         }
     }
 
+    @Override
     public int dereferencePacket() {
         if (useAtomicRefCount) {
             return duAtomicRefCount.decrementAndGet();
@@ -124,6 +132,7 @@ public class VideoPacket implements RtpPacketFields {
         }
     }
 
+    @Override
     public int getRefCount() {
         if (useAtomicRefCount) {
             return duAtomicRefCount.get();

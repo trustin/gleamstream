@@ -1,10 +1,10 @@
 package com.limelight.nvstream.av.audio;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.net.SocketException;
+import java.net.StandardSocketOptions;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
 import com.limelight.nvstream.ConnectionContext;
@@ -21,16 +21,16 @@ public class AudioStream {
     private static final int RTP_RECV_BUFFER = 64 * 1024;
     private static final int MAX_PACKET_SIZE = 250;
 
-    private DatagramSocket rtp;
+    private DatagramChannel rtp;
 
     private AudioDepacketizer depacketizer;
 
-    private LinkedList<Thread> threads = new LinkedList<Thread>();
+    private final LinkedList<Thread> threads = new LinkedList<>();
 
-    private boolean aborting = false;
+    private boolean aborting;
 
-    private ConnectionContext context;
-    private AudioRenderer streamListener;
+    private final ConnectionContext context;
+    private final AudioRenderer streamListener;
 
     public AudioStream(ConnectionContext context, AudioRenderer streamListener) {
         this.context = context;
@@ -50,7 +50,11 @@ public class AudioStream {
 
         // Close the socket to interrupt the receive thread
         if (rtp != null) {
-            rtp.close();
+            try {
+                rtp.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         // Wait for threads to terminate
@@ -65,7 +69,7 @@ public class AudioStream {
         threads.clear();
     }
 
-    public boolean startAudioStream() throws SocketException {
+    public boolean startAudioStream() throws IOException {
         setupRtpSession();
 
         if (!setupAudio()) {
@@ -84,16 +88,22 @@ public class AudioStream {
         return true;
     }
 
-    private void setupRtpSession() throws SocketException {
-        rtp = new DatagramSocket();
-        rtp.setReceiveBufferSize(RTP_RECV_BUFFER);
+    private void setupRtpSession() throws IOException {
+        rtp = DatagramChannel.open();
+        rtp.setOption(StandardSocketOptions.SO_RCVBUF, RTP_RECV_BUFFER);
+        try {
+            rtp.setOption(StandardSocketOptions.IP_TOS, 0x10); // IPTOS_LOWDELAY
+        } catch (Exception ignored) {
+            // May not be supported on some platforms.
+        }
+        rtp.connect(new InetSocketAddress(context.serverAddress, RTP_PORT));
     }
 
-    private static final int[] STREAMS_2 = new int[] { 1, 1 };
-    private static final int[] STREAMS_5_1 = new int[] { 4, 2 };
+    private static final int[] STREAMS_2 = { 1, 1 };
+    private static final int[] STREAMS_5_1 = { 4, 2 };
 
-    private static final byte[] MAPPING_2 = new byte[] { 0, 1 };
-    private static final byte[] MAPPING_5_1 = new byte[] { 0, 4, 1, 5, 2, 3 };
+    private static final byte[] MAPPING_2 = { 0, 1 };
+    private static final byte[] MAPPING_5_1 = { 0, 4, 1, 5, 2, 3 };
 
     private boolean setupAudio() {
         int err;
@@ -169,22 +179,23 @@ public class AudioStream {
             @Override
             public void run() {
                 byte[] buffer = new byte[MAX_PACKET_SIZE];
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                ByteBuffer packet = ByteBuffer.wrap(buffer);
                 RtpPacket queuedPacket, rtpPacket = new RtpPacket(buffer);
                 RtpReorderQueue rtpQueue = new RtpReorderQueue();
                 RtpReorderQueue.RtpQueueStatus queueStatus;
 
                 while (!isInterrupted()) {
                     try {
-                        rtp.receive(packet);
+                        packet.clear();
+                        rtp.read(packet);
+                        packet.flip();
 
                         // DecodeInputData() doesn't hold onto the buffer so we are free to reuse it
-                        rtpPacket.initializeWithLength(packet.getLength());
+                        rtpPacket.initializeWithLength(packet.remaining());
 
                         // Throw away non-audio packets before queuing
                         if (rtpPacket.getPacketType() != 97) {
                             // Only type 97 is audio
-                            packet.setLength(MAX_PACKET_SIZE);
                             continue;
                         }
 
@@ -192,15 +203,12 @@ public class AudioStream {
                         if (queueStatus == RtpReorderQueue.RtpQueueStatus.HANDLE_IMMEDIATELY) {
                             // Send directly to the depacketizer
                             depacketizer.decodeInputData(rtpPacket);
-                            packet.setLength(MAX_PACKET_SIZE);
                         } else {
                             if (queueStatus != RtpReorderQueue.RtpQueueStatus.REJECTED) {
                                 // The queue consumed our packet, so we must allocate a new one
                                 buffer = new byte[MAX_PACKET_SIZE];
-                                packet = new DatagramPacket(buffer, buffer.length);
+                                packet = ByteBuffer.wrap(buffer);
                                 rtpPacket = new RtpPacket(buffer);
-                            } else {
-                                packet.setLength(MAX_PACKET_SIZE);
                             }
 
                             // If packets are ready, pull them and send them to the depacketizer
@@ -230,14 +238,13 @@ public class AudioStream {
             @Override
             public void run() {
                 // PING in ASCII
-                final byte[] pingPacketData = new byte[] { 0x50, 0x49, 0x4E, 0x47 };
-                DatagramPacket pingPacket = new DatagramPacket(pingPacketData, pingPacketData.length);
-                pingPacket.setSocketAddress(new InetSocketAddress(context.serverAddress, RTP_PORT));
+                final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
 
                 // Send PING every 500 ms
                 while (!isInterrupted()) {
                     try {
-                        rtp.send(pingPacket);
+                        pingPacketData.clear();
+                        rtp.write(pingPacketData);
                     } catch (IOException e) {
                         context.connListener.connectionTerminated(e);
                         return;

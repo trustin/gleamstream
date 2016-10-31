@@ -1,11 +1,11 @@
 package com.limelight.nvstream.av.video;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketException;
+import java.net.StandardSocketOptions;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
 import com.limelight.LimeLog;
@@ -32,19 +32,19 @@ public class VideoStream {
     // presentable frame
     private static final int VIDEO_RING_SIZE = 384 * 8;
 
-    private DatagramSocket rtp;
+    private DatagramChannel rtp;
     private Socket firstFrameSocket;
 
-    private LinkedList<Thread> threads = new LinkedList<Thread>();
+    private final LinkedList<Thread> threads = new LinkedList<Thread>();
 
-    private ConnectionContext context;
-    private ConnectionStatusListener avConnListener;
+    private final ConnectionContext context;
+    private final ConnectionStatusListener avConnListener;
     private VideoDepacketizer depacketizer;
 
     private VideoDecoderRenderer decRend;
     private boolean startedRendering;
 
-    private boolean aborting = false;
+    private boolean aborting;
 
     public VideoStream(ConnectionContext context, ConnectionStatusListener avConnListener) {
         this.context = context;
@@ -65,7 +65,11 @@ public class VideoStream {
 
         // Close the socket to interrupt the receive thread
         if (rtp != null) {
-            rtp.close();
+            try {
+                rtp.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
         if (firstFrameSocket != null) {
             try {
@@ -106,9 +110,15 @@ public class VideoStream {
         firstFrameSocket = null;
     }
 
-    public void setupRtpSession() throws SocketException {
-        rtp = new DatagramSocket();
-        rtp.setReceiveBufferSize(RTP_RECV_BUFFER);
+    public void setupRtpSession() throws IOException {
+        rtp = DatagramChannel.open();
+        rtp.setOption(StandardSocketOptions.SO_RCVBUF, RTP_RECV_BUFFER);
+        try {
+            rtp.setOption(StandardSocketOptions.IP_TOS, 0x10); // IPTOS_LOWDELAY
+        } catch (Exception ignored) {
+            // May not be supported on some platforms.
+        }
+        rtp.connect(new InetSocketAddress(context.serverAddress, RTP_PORT));
     }
 
     public boolean setupDecoderRenderer(VideoDecoderRenderer decRend, Object renderTarget, int drFlags) {
@@ -150,7 +160,7 @@ public class VideoStream {
         // Open RTP sockets and start session
         setupRtpSession();
 
-        if (this.decRend != null) {
+        if (decRend != null) {
             // Start the receive thread early to avoid missing
             // early packets that are part of the IDR frame
             startReceiveThread();
@@ -178,15 +188,15 @@ public class VideoStream {
         Thread t = new Thread() {
             @Override
             public void run() {
-                VideoPacket ring[] = new VideoPacket[VIDEO_RING_SIZE];
+                VideoPacket[] ring = new VideoPacket[VIDEO_RING_SIZE];
                 VideoPacket queuedPacket;
                 int ringIndex = 0;
                 RtpReorderQueue rtpQueue = new RtpReorderQueue(16, MAX_RTP_QUEUE_DELAY_MS);
                 RtpReorderQueue.RtpQueueStatus queueStatus;
 
-                boolean directSubmit = (decRend != null && (decRend.getCapabilities() &
-                                                            VideoDecoderRenderer.CAPABILITY_DIRECT_SUBMIT)
-                                                           != 0);
+                boolean directSubmit = decRend != null && (decRend.getCapabilities() &
+                                                           VideoDecoderRenderer.CAPABILITY_DIRECT_SUBMIT)
+                                                          != 0;
 
                 // Preinitialize the ring buffer
                 int requiredBufferSize = context.streamConfig.getMaxPacketSize() + RtpPacket.MAX_HEADER_SIZE;
@@ -194,20 +204,20 @@ public class VideoStream {
                     ring[i] = new VideoPacket(new byte[requiredBufferSize], !directSubmit);
                 }
 
-                byte[] buffer;
-                DatagramPacket packet = new DatagramPacket(new byte[1], 1); // Placeholder array
+                ByteBuffer buffer;
                 int iterationStart;
                 while (!isInterrupted()) {
                     try {
                         // Pull the next buffer in the ring and reset it
-                        buffer = ring[ringIndex].getBuffer();
+                        buffer = ring[ringIndex].getByteBuffer();
+                        buffer.clear();
 
                         // Read the video data off the network
-                        packet.setData(buffer, 0, buffer.length);
-                        rtp.receive(packet);
+                        rtp.read(buffer);
+                        buffer.flip();
 
                         // Initialize the video packet
-                        ring[ringIndex].initializeWithLength(packet.getLength());
+                        ring[ringIndex].initializeWithLength(buffer.remaining());
 
                         queueStatus = rtpQueue.addPacket(ring[ringIndex]);
                         if (queueStatus == RtpReorderQueue.RtpQueueStatus.HANDLE_IMMEDIATELY) {
@@ -262,14 +272,13 @@ public class VideoStream {
             @Override
             public void run() {
                 // PING in ASCII
-                final byte[] pingPacketData = new byte[] { 0x50, 0x49, 0x4E, 0x47 };
-                DatagramPacket pingPacket = new DatagramPacket(pingPacketData, pingPacketData.length);
-                pingPacket.setSocketAddress(new InetSocketAddress(context.serverAddress, RTP_PORT));
+                final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
 
                 // Send PING every 500 ms
                 while (!isInterrupted()) {
                     try {
-                        rtp.send(pingPacket);
+                        pingPacketData.clear();
+                        rtp.write(pingPacketData);
                     } catch (IOException e) {
                         context.connListener.connectionTerminated(e);
                         return;
