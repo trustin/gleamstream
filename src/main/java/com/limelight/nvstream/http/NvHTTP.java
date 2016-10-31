@@ -8,7 +8,6 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.net.Inet6Address;
 import java.net.InetAddress;
-import java.net.MalformedURLException;
 import java.net.Socket;
 import java.security.Principal;
 import java.security.PrivateKey;
@@ -24,16 +23,16 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509KeyManager;
 import javax.net.ssl.X509TrustManager;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
-import com.limelight.LimeLog;
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.http.PairingManager.PairState;
 import com.squareup.okhttp.ConnectionPool;
@@ -43,21 +42,24 @@ import com.squareup.okhttp.Response;
 import com.squareup.okhttp.ResponseBody;
 
 public class NvHTTP {
-    private String uniqueId;
-    private PairingManager pm;
-    private InetAddress address;
+
+    private static final Logger logger = LoggerFactory.getLogger(NvHTTP.class);
+
+    private final String uniqueId;
+    private final PairingManager pm;
+    private final InetAddress address;
 
     public static final int HTTPS_PORT = 47984;
     public static final int HTTP_PORT = 47989;
     public static final int CONNECTION_TIMEOUT = 3000;
     public static final int READ_TIMEOUT = 5000;
 
-    private static boolean verbose = false;
+    private static boolean verbose;
 
     public String baseUrlHttps;
     public String baseUrlHttp;
 
-    private OkHttpClient httpClient = new OkHttpClient();
+    private final OkHttpClient httpClient = new OkHttpClient();
     private OkHttpClient httpClientWithReadTimeout;
 
     private TrustManager[] trustAllCerts;
@@ -66,43 +68,50 @@ public class NvHTTP {
     private void initializeHttpState(final LimelightCryptoProvider cryptoProvider) {
         trustAllCerts = new TrustManager[] {
                 new X509TrustManager() {
+                    @Override
                     public X509Certificate[] getAcceptedIssuers() {
                         return new X509Certificate[0];
                     }
 
+                    @Override
                     public void checkClientTrusted(X509Certificate[] certs, String authType) {}
 
+                    @Override
                     public void checkServerTrusted(X509Certificate[] certs, String authType) {}
                 }
         };
 
         ourKeyman = new KeyManager[] {
                 new X509KeyManager() {
+                    @Override
                     public String chooseClientAlias(String[] keyTypes,
                                                     Principal[] issuers,
                                                     Socket socket) { return "Limelight-RSA"; }
 
+                    @Override
                     public String chooseServerAlias(String keyType, Principal[] issuers,
                                                     Socket socket) { return null; }
 
+                    @Override
                     public X509Certificate[] getCertificateChain(String alias) {
                         return new X509Certificate[] { cryptoProvider.getClientCertificate() };
                     }
 
+                    @Override
                     public String[] getClientAliases(String keyType, Principal[] issuers) { return null; }
 
+                    @Override
                     public PrivateKey getPrivateKey(String alias) {
                         return cryptoProvider.getClientPrivateKey();
                     }
 
+                    @Override
                     public String[] getServerAliases(String keyType, Principal[] issuers) { return null; }
                 }
         };
 
         // Ignore differences between given hostname and certificate hostname
-        HostnameVerifier hv = new HostnameVerifier() {
-            public boolean verify(String hostname, SSLSession session) { return true; }
-        };
+        HostnameVerifier hv = (hostname, session) -> true;
 
         httpClient.setConnectionPool(new ConnectionPool(0, 60000));
         httpClient.setHostnameVerifier(hv);
@@ -112,24 +121,24 @@ public class NvHTTP {
         httpClientWithReadTimeout.setReadTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS);
     }
 
-    public NvHTTP(InetAddress host, String uniqueId, String deviceName,
+    public NvHTTP(InetAddress host, String uniqueId,
                   LimelightCryptoProvider cryptoProvider) {
         this.uniqueId = uniqueId;
-        this.address = host;
+        address = host;
 
         String safeAddress;
         if (host instanceof Inet6Address) {
             // RFC2732-formatted IPv6 address for use in URL
-            safeAddress = "[" + host.getHostAddress() + "]";
+            safeAddress = '[' + host.getHostAddress() + ']';
         } else {
             safeAddress = host.getHostAddress();
         }
 
         initializeHttpState(cryptoProvider);
 
-        this.baseUrlHttps = "https://" + safeAddress + ":" + HTTPS_PORT;
-        this.baseUrlHttp = "http://" + safeAddress + ":" + HTTP_PORT;
-        this.pm = new PairingManager(this, cryptoProvider);
+        baseUrlHttps = "https://" + safeAddress + ':' + HTTPS_PORT;
+        baseUrlHttp = "http://" + safeAddress + ':' + HTTP_PORT;
+        pm = new PairingManager(this, cryptoProvider);
     }
 
     String buildUniqueIdUuidString() {
@@ -143,20 +152,20 @@ public class NvHTTP {
 
         xpp.setInput(r);
         int eventType = xpp.getEventType();
-        Stack<String> currentTag = new Stack<String>();
+        Stack<String> currentTag = new Stack<>();
 
         while (eventType != XmlPullParser.END_DOCUMENT) {
             switch (eventType) {
-                case (XmlPullParser.START_TAG):
-                    if (xpp.getName().equals("root")) {
+                case XmlPullParser.START_TAG:
+                    if ("root".equals(xpp.getName())) {
                         verifyResponseStatus(xpp);
                     }
                     currentTag.push(xpp.getName());
                     break;
-                case (XmlPullParser.END_TAG):
+                case XmlPullParser.END_TAG:
                     currentTag.pop();
                     break;
-                case (XmlPullParser.TEXT):
+                case XmlPullParser.TEXT:
                     if (currentTag.peek().equals(tagname)) {
                         return xpp.getText().trim();
                     }
@@ -184,7 +193,7 @@ public class NvHTTP {
         }
     }
 
-    public String getServerInfo() throws MalformedURLException, IOException, XmlPullParserException {
+    public String getServerInfo() throws IOException, XmlPullParserException {
         String resp;
 
         //
@@ -212,7 +221,7 @@ public class NvHTTP {
     }
 
     public ComputerDetails getComputerDetails()
-            throws MalformedURLException, IOException, XmlPullParserException {
+            throws IOException, XmlPullParserException {
         ComputerDetails details = new ComputerDetails();
         String serverInfo = getServerInfo();
 
@@ -306,9 +315,9 @@ public class NvHTTP {
     }
 
     String openHttpConnectionToString(String url, boolean enableReadTimeout)
-            throws MalformedURLException, IOException {
+            throws IOException {
         if (verbose) {
-            LimeLog.info("Requesting URL: " + url);
+            logger.info("Requesting URL: " + url);
         }
 
         ResponseBody resp;
@@ -338,7 +347,7 @@ public class NvHTTP {
         }
 
         if (verbose) {
-            LimeLog.info(url + " -> " + strb.toString());
+            logger.info(url + " -> " + strb);
         }
 
         return strb.toString();
@@ -451,7 +460,7 @@ public class NvHTTP {
     public boolean isCurrentClient(String serverInfo) throws XmlPullParserException, IOException {
         String currentClient = getXmlString(serverInfo, "CurrentClient");
         if (currentClient != null) {
-            return !currentClient.equals("0");
+            return !"0".equals(currentClient);
         } else {
             // For versions of GFE that lack this field, we'll assume we are
             // the current client. If we're not, we'll get a response error that
@@ -495,32 +504,32 @@ public class NvHTTP {
 
         xpp.setInput(r);
         int eventType = xpp.getEventType();
-        LinkedList<NvApp> appList = new LinkedList<NvApp>();
-        Stack<String> currentTag = new Stack<String>();
+        LinkedList<NvApp> appList = new LinkedList<>();
+        Stack<String> currentTag = new Stack<>();
         boolean rootTerminated = false;
 
         while (eventType != XmlPullParser.END_DOCUMENT) {
             switch (eventType) {
-                case (XmlPullParser.START_TAG):
-                    if (xpp.getName().equals("root")) {
+                case XmlPullParser.START_TAG:
+                    if ("root".equals(xpp.getName())) {
                         verifyResponseStatus(xpp);
                     }
                     currentTag.push(xpp.getName());
-                    if (xpp.getName().equals("App")) {
+                    if ("App".equals(xpp.getName())) {
                         appList.addLast(new NvApp());
                     }
                     break;
-                case (XmlPullParser.END_TAG):
+                case XmlPullParser.END_TAG:
                     currentTag.pop();
-                    if (xpp.getName().equals("root")) {
+                    if ("root".equals(xpp.getName())) {
                         rootTerminated = true;
                     }
                     break;
-                case (XmlPullParser.TEXT):
+                case XmlPullParser.TEXT:
                     NvApp app = appList.getLast();
-                    if (currentTag.peek().equals("AppTitle")) {
+                    if ("AppTitle".equals(currentTag.peek())) {
                         app.setAppName(xpp.getText().trim());
-                    } else if (currentTag.peek().equals("ID")) {
+                    } else if ("ID".equals(currentTag.peek())) {
                         app.setAppId(xpp.getText().trim());
                     }
                     break;
@@ -540,7 +549,7 @@ public class NvHTTP {
 
             // Remove uninitialized apps
             if (!app.isInitialized()) {
-                LimeLog.warning("GFE returned incomplete app: " + app.getAppId() + " " + app.getAppName());
+                logger.warn("GFE returned incomplete app: " + app.getAppId() + ' ' + app.getAppName());
                 i.remove();
             }
         }
@@ -548,11 +557,11 @@ public class NvHTTP {
         return appList;
     }
 
-    public String getAppListRaw() throws MalformedURLException, IOException {
+    public String getAppListRaw() throws IOException {
         return openHttpConnectionToString(baseUrlHttps + "/applist?" + buildUniqueIdUuidString(), true);
     }
 
-    public LinkedList<NvApp> getAppList() throws GfeHttpResponseException, IOException, XmlPullParserException {
+    public LinkedList<NvApp> getAppList() throws IOException, XmlPullParserException {
         if (verbose) {
             // Use the raw function so the app list is printed
             return getAppListByReader(new StringReader(getAppListRaw()));
@@ -588,12 +597,12 @@ public class NvHTTP {
         try {
             String serverVersion = getServerVersion(serverInfo);
             if (serverVersion == null) {
-                LimeLog.warning("Missing server version field");
+                logger.warn("Missing server version field");
                 return null;
             }
             String[] serverVersionSplit = serverVersion.split("\\.");
             if (serverVersionSplit.length != 4) {
-                LimeLog.warning("Malformed server version field");
+                logger.warn("Malformed server version field");
                 return null;
             }
             int[] ret = new int[serverVersionSplit.length];
@@ -607,7 +616,7 @@ public class NvHTTP {
         }
     }
 
-    final private static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
 
     private static String bytesToHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];
@@ -623,8 +632,8 @@ public class NvHTTP {
         String xmlStr = openHttpConnectionToString(baseUrlHttps +
                                                    "/launch?" + buildUniqueIdUuidString() +
                                                    "&appid=" + appId +
-                                                   "&mode=" + context.negotiatedWidth + "x"
-                                                   + context.negotiatedHeight + "x" + context.negotiatedFps +
+                                                   "&mode=" + context.negotiatedWidth + 'x'
+                                                   + context.negotiatedHeight + 'x' + context.negotiatedFps +
                                                    "&additionalStates=1&sops=" + (
                                                            context.streamConfig.getSops() ? 1 : 0) +
                                                    "&rikey=" + bytesToHex(context.riKey.getEncoded()) +
@@ -636,7 +645,7 @@ public class NvHTTP {
                                                            + context.streamConfig.getAudioChannelCount()),
                                                    false);
         String gameSession = getXmlString(xmlStr, "gamesession");
-        return gameSession != null && !gameSession.equals("0");
+        return gameSession != null && !"0".equals(gameSession);
     }
 
     public boolean resumeApp(ConnectionContext context) throws IOException, XmlPullParserException {

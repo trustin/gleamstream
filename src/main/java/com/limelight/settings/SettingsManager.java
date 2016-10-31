@@ -8,26 +8,31 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Serializable;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
-import com.limelight.LimeLog;
 
 /**
  * Manages the settings files
  * @author Diego Waxemberg
  */
 public class SettingsManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(SettingsManager.class);
+
     /**
      * Directory to which settings will be saved
      */
-    public static String SETTINGS_DIR = System.getProperty("user.home") + File.separator + "Limelight";
+    public static final String SETTINGS_DIR = System.getProperty("user.home") + File.separator + "Limelight";
 
     //directory to hold limelight settings
-    private File settingsDir;
+    private final File settingsDir;
 
-    private File settingsFile;
-    private File gamepadFile;
+    private final File settingsFile;
+    private final File gamepadFile;
 
     private static SettingsManager manager;
 
@@ -64,7 +69,7 @@ public class SettingsManager {
             try {
                 gamepadFile.createNewFile();
             } catch (IOException e) {
-                LimeLog.warning("Unable to create gamepad file");
+                logger.warn("Unable to create gamepad file");
                 return null;
             }
         }
@@ -85,7 +90,7 @@ public class SettingsManager {
             try {
                 settingsFile.createNewFile();
             } catch (IOException e) {
-                LimeLog.warning("Unable to create setting file");
+                logger.warn("Unable to create setting file");
                 return null;
             }
         }
@@ -96,7 +101,6 @@ public class SettingsManager {
     /**
      * Reads the specified file as a settings file and returns the result.
      * <br>A settings file must be a java serialized object
-     * @param <T>
      * @param file the file to read in
      * @return the settings represented in this file
      */
@@ -109,16 +113,16 @@ public class SettingsManager {
             br = new BufferedReader(new FileReader(file));
             settings = gson.fromJson(br, klass);
         } catch (FileNotFoundException e) {
-            LimeLog.warning("Could not find " + file.getName() + " settings file");
+            logger.warn("Could not find " + file.getName() + " settings file");
             e.printStackTrace();
         } catch (JsonSyntaxException e) {
-            LimeLog.warning("JSON settings are corrupt; returning null");
+            logger.warn("JSON settings are corrupt; returning null");
         } finally {
             if (br != null) {
                 try {
                     br.close();
                 } catch (IOException e) {
-                    LimeLog.warning("Could not close gamepad settings file");
+                    logger.warn("Could not close gamepad settings file");
                     e.printStackTrace();
                 }
             }
@@ -141,11 +145,11 @@ public class SettingsManager {
             writer = new FileWriter(file);
             writer.write(json);
         } catch (FileNotFoundException e) {
-            LimeLog.warning("Could not find " + file.getName() + " settings file");
+            logger.warn("Could not find " + file.getName() + " settings file");
             e.printStackTrace();
 
         } catch (IOException e) {
-            LimeLog.warning("Could not write to " + file.getName() + " settings file");
+            logger.warn("Could not write to " + file.getName() + " settings file");
             e.printStackTrace();
 
         } finally {
@@ -153,7 +157,7 @@ public class SettingsManager {
                 try {
                     writer.close();
                 } catch (IOException e) {
-                    LimeLog.warning("Unable to close " + file.getName() + " settings file");
+                    logger.warn("Unable to close " + file.getName() + " settings file");
                     e.printStackTrace();
                 }
             }

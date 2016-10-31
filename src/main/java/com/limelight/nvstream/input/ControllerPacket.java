@@ -44,7 +44,7 @@ public class ControllerPacket extends MultiControllerPacket {
 
     private static final short PAYLOAD_LENGTH = 24;
     private static final short PACKET_LENGTH = PAYLOAD_LENGTH +
-                                               InputPacket.HEADER_LENGTH;
+                                               HEADER_LENGTH;
 
     public ControllerPacket(short buttonFlags, byte leftTrigger, byte rightTrigger,
                             short leftStickX, short leftStickY,

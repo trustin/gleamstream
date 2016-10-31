@@ -3,7 +3,6 @@ package com.limelight.nvstream.http;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.net.MalformedURLException;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -27,18 +26,19 @@ import javax.crypto.SecretKey;
 import javax.crypto.ShortBufferException;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xmlpull.v1.XmlPullParserException;
-
-import com.limelight.LimeLog;
 
 public class PairingManager {
 
-    private NvHTTP http;
+    private static final Logger logger = LoggerFactory.getLogger(PairingManager.class);
 
-    private PrivateKey pk;
-    private X509Certificate cert;
-    private SecretKey aesKey;
-    private byte[] pemCertBytes;
+    private final NvHTTP http;
+
+    private final PrivateKey pk;
+    private final X509Certificate cert;
+    private final byte[] pemCertBytes;
 
     public enum PairState {
         NOT_PAIRED,
@@ -50,12 +50,12 @@ public class PairingManager {
 
     public PairingManager(NvHTTP http, LimelightCryptoProvider cryptoProvider) {
         this.http = http;
-        this.cert = cryptoProvider.getClientCertificate();
-        this.pemCertBytes = cryptoProvider.getPemEncodedClientCertificate();
-        this.pk = cryptoProvider.getClientPrivateKey();
+        cert = cryptoProvider.getClientCertificate();
+        pemCertBytes = cryptoProvider.getPemEncodedClientCertificate();
+        pk = cryptoProvider.getClientPrivateKey();
     }
 
-    final private static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
 
     private static String bytesToHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];
@@ -77,7 +77,7 @@ public class PairingManager {
         return data;
     }
 
-    private X509Certificate extractPlainCert(String text)
+    private static X509Certificate extractPlainCert(String text)
             throws XmlPullParserException, IOException, CertificateException {
         String certText = NvHTTP.getXmlString(text, "plaincert");
         if (certText != null) {
@@ -89,7 +89,7 @@ public class PairingManager {
         }
     }
 
-    private byte[] generateRandomBytes(int length) {
+    private static byte[] generateRandomBytes(int length) {
         byte[] rand = new byte[length];
         new SecureRandom().nextBytes(rand);
         return rand;
@@ -121,12 +121,12 @@ public class PairingManager {
     }
 
     private static byte[] decryptAes(byte[] encryptedData, SecretKey secretKey)
-            throws NoSuchAlgorithmException, SignatureException,
+            throws NoSuchAlgorithmException,
                    InvalidKeyException, ShortBufferException, IllegalBlockSizeException, BadPaddingException,
                    NoSuchPaddingException {
         Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
 
-        int blockRoundedSize = ((encryptedData.length + 15) / 16) * 16;
+        int blockRoundedSize = (encryptedData.length + 15) / 16 * 16;
         byte[] blockRoundedEncrypted = Arrays.copyOf(encryptedData, blockRoundedSize);
         byte[] fullDecrypted = new byte[blockRoundedSize];
 
@@ -137,12 +137,12 @@ public class PairingManager {
     }
 
     private static byte[] encryptAes(byte[] data, SecretKey secretKey)
-            throws NoSuchAlgorithmException, SignatureException,
-                   InvalidKeyException, ShortBufferException, IllegalBlockSizeException, BadPaddingException,
+            throws NoSuchAlgorithmException,
+                   InvalidKeyException, IllegalBlockSizeException, BadPaddingException,
                    NoSuchPaddingException {
         Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
 
-        int blockRoundedSize = ((data.length + 15) / 16) * 16;
+        int blockRoundedSize = (data.length + 15) / 16 * 16;
         byte[] blockRoundedData = Arrays.copyOf(data, blockRoundedSize);
 
         cipher.init(Cipher.ENCRYPT_MODE, secretKey);
@@ -169,8 +169,8 @@ public class PairingManager {
     }
 
     public PairState getPairState(String serverInfo)
-            throws MalformedURLException, IOException, XmlPullParserException {
-        if (!NvHTTP.getXmlString(serverInfo, "PairStatus").equals("1")) {
+            throws IOException, XmlPullParserException {
+        if (!"1".equals(NvHTTP.getXmlString(serverInfo, "PairStatus"))) {
             return PairState.NOT_PAIRED;
         }
 
@@ -178,13 +178,13 @@ public class PairingManager {
     }
 
     public PairState pair(String serverInfo, String pin)
-            throws MalformedURLException, IOException, XmlPullParserException, CertificateException,
+            throws IOException, XmlPullParserException, CertificateException,
                    InvalidKeyException, NoSuchAlgorithmException, SignatureException, ShortBufferException,
                    IllegalBlockSizeException, BadPaddingException, NoSuchPaddingException {
         PairingHashAlgorithm hashAlgo;
 
         int serverMajorVersion = http.getServerMajorVersion(serverInfo);
-        LimeLog.info("Pairing with server generation: " + serverMajorVersion);
+        logger.info("Pairing with server generation: " + serverMajorVersion);
         if (serverMajorVersion >= 7) {
             // Gen 7+ uses SHA-256 hashing
             hashAlgo = new Sha256PairingHash();
@@ -198,7 +198,7 @@ public class PairingManager {
 
         // Combine the salt and pin, then create an AES key from them
         byte[] saltAndPin = saltPin(salt, pin);
-        aesKey = generateAesKey(hashAlgo, saltAndPin);
+        SecretKey aesKey = generateAesKey(hashAlgo, saltAndPin);
 
         // Send the salt and get the server cert. This doesn't have a read timeout
         // because the user must enter the PIN before the server responds
@@ -209,7 +209,7 @@ public class PairingManager {
                                                          bytesToHex(salt) + "&clientcert=" + bytesToHex(
                 pemCertBytes),
                                                          false);
-        if (!NvHTTP.getXmlString(getCert, "paired").equals("1")) {
+        if (!"1".equals(NvHTTP.getXmlString(getCert, "paired"))) {
             return PairState.FAILED;
         }
         X509Certificate serverCert = extractPlainCert(getCert);
@@ -229,7 +229,7 @@ public class PairingManager {
                                                                + "&devicename=roth&updateState=1&clientchallenge="
                                                                + bytesToHex(encryptedChallenge),
                                                                true);
-        if (!NvHTTP.getXmlString(challengeResp, "paired").equals("1")) {
+        if (!"1".equals(NvHTTP.getXmlString(challengeResp, "paired"))) {
             http.openHttpConnectionToString(http.baseUrlHttp + "/unpair?" + http.buildUniqueIdUuidString(),
                                             true);
             return PairState.FAILED;
@@ -253,7 +253,7 @@ public class PairingManager {
                                                             + "&devicename=roth&updateState=1&serverchallengeresp="
                                                             + bytesToHex(challengeRespEncrypted),
                                                             true);
-        if (!NvHTTP.getXmlString(secretResp, "paired").equals("1")) {
+        if (!"1".equals(NvHTTP.getXmlString(secretResp, "paired"))) {
             http.openHttpConnectionToString(http.baseUrlHttp + "/unpair?" + http.buildUniqueIdUuidString(),
                                             true);
             return PairState.FAILED;
@@ -293,7 +293,7 @@ public class PairingManager {
                                                                   + "&devicename=roth&updateState=1&clientpairingsecret="
                                                                   + bytesToHex(clientPairingSecret),
                                                                   true);
-        if (!NvHTTP.getXmlString(clientSecretResp, "paired").equals("1")) {
+        if (!"1".equals(NvHTTP.getXmlString(clientSecretResp, "paired"))) {
             http.openHttpConnectionToString(http.baseUrlHttp + "/unpair?" + http.buildUniqueIdUuidString(),
                                             true);
             return PairState.FAILED;
@@ -304,7 +304,7 @@ public class PairingManager {
                                                                "/pair?" + http.buildUniqueIdUuidString()
                                                                + "&devicename=roth&updateState=1&phrase=pairchallenge",
                                                                true);
-        if (!NvHTTP.getXmlString(pairChallenge, "paired").equals("1")) {
+        if (!"1".equals(NvHTTP.getXmlString(pairChallenge, "paired"))) {
             http.openHttpConnectionToString(http.baseUrlHttp + "/unpair?" + http.buildUniqueIdUuidString(),
                                             true);
             return PairState.FAILED;
@@ -313,17 +313,19 @@ public class PairingManager {
         return PairState.PAIRED;
     }
 
-    private static interface PairingHashAlgorithm {
-        public int getHashLength();
+    private interface PairingHashAlgorithm {
+        int getHashLength();
 
-        public byte[] hashData(byte[] data);
+        byte[] hashData(byte[] data);
     }
 
     private static class Sha1PairingHash implements PairingHashAlgorithm {
+        @Override
         public int getHashLength() {
             return 20;
         }
 
+        @Override
         public byte[] hashData(byte[] data) {
             try {
                 MessageDigest md = MessageDigest.getInstance("SHA-1");
@@ -337,10 +339,12 @@ public class PairingManager {
     }
 
     private static class Sha256PairingHash implements PairingHashAlgorithm {
+        @Override
         public int getHashLength() {
             return 32;
         }
 
+        @Override
         public byte[] hashData(byte[] data) {
             try {
                 MessageDigest md = MessageDigest.getInstance("SHA-256");

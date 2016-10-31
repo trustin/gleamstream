@@ -1,6 +1,8 @@
 package com.limelight.nvstream.av.video;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.ConnectionStatusListener;
@@ -13,8 +15,10 @@ import com.limelight.utils.TimeHelper;
 
 public class VideoDepacketizer {
 
+    private static final Logger logger = LoggerFactory.getLogger(VideoDepacketizer.class);
+
     // Current frame state
-    private int frameDataLength = 0;
+    private int frameDataLength;
     private ByteBufferDescriptor frameDataChainHead;
     private ByteBufferDescriptor frameDataChainTail;
     private VideoPacket backingPacketHead;
@@ -23,37 +27,37 @@ public class VideoDepacketizer {
     // Sequencing state
     private int lastPacketInStream = -1;
     private int nextFrameNumber = 1;
-    private int startFrameNumber = 0;
+    private int startFrameNumber;
     private boolean waitingForNextSuccessfulFrame;
     private boolean waitingForIdrFrame = true;
     private long frameStartTime;
     private boolean decodingFrame;
-    private boolean strictIdrFrameWait;
+    private final boolean strictIdrFrameWait;
 
     // Cached objects
-    private ByteBufferDescriptor cachedReassemblyDesc = new ByteBufferDescriptor(null, 0, 0);
-    private ByteBufferDescriptor cachedSpecialDesc = new ByteBufferDescriptor(null, 0, 0);
+    private final ByteBufferDescriptor cachedReassemblyDesc = new ByteBufferDescriptor(null, 0, 0);
+    private final ByteBufferDescriptor cachedSpecialDesc = new ByteBufferDescriptor(null, 0, 0);
 
-    private ConnectionStatusListener controlListener;
+    private final ConnectionStatusListener controlListener;
     private final int nominalPacketDataLength;
 
     private static final int CONSECUTIVE_DROP_LIMIT = 120;
-    private int consecutiveFrameDrops = 0;
+    private int consecutiveFrameDrops;
 
     private static final int DU_LIMIT = 15;
-    private AbstractPopulatedBufferList<DecodeUnit> decodedUnits;
+    private final AbstractPopulatedBufferList<DecodeUnit> decodedUnits;
 
     private final int frameHeaderOffset;
 
     public VideoDepacketizer(ConnectionContext context, ConnectionStatusListener controlListener,
                              int nominalPacketSize) {
         this.controlListener = controlListener;
-        this.nominalPacketDataLength = nominalPacketSize - VideoPacket.HEADER_SIZE;
+        nominalPacketDataLength = nominalPacketSize - VideoPacket.HEADER_SIZE;
 
-        if ((context.serverAppVersion[0] > 7) ||
-            (context.serverAppVersion[0] == 7 && context.serverAppVersion[1] > 1) ||
-            (context.serverAppVersion[0] == 7 && context.serverAppVersion[1] == 1
-             && context.serverAppVersion[2] >= 320)) {
+        if (context.serverAppVersion[0] > 7 ||
+            context.serverAppVersion[0] == 7 && context.serverAppVersion[1] > 1 ||
+            context.serverAppVersion[0] == 7 && context.serverAppVersion[1] == 1
+             && context.serverAppVersion[2] >= 320) {
             // Anything over 7.1.320 should use the 12 byte frame header
             frameHeaderOffset = 12;
         } else if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
@@ -67,20 +71,22 @@ public class VideoDepacketizer {
         boolean unsynchronized;
         if (context.videoDecoderRenderer != null) {
             int videoCaps = context.videoDecoderRenderer.getCapabilities();
-            this.strictIdrFrameWait =
+            strictIdrFrameWait =
                     (videoCaps & VideoDecoderRenderer.CAPABILITY_REFERENCE_FRAME_INVALIDATION) == 0;
             unsynchronized = (videoCaps & VideoDecoderRenderer.CAPABILITY_DIRECT_SUBMIT) != 0;
         } else {
             // If there's no renderer, it doesn't matter if we synchronize or wait for IDRs
-            this.strictIdrFrameWait = false;
+            strictIdrFrameWait = false;
             unsynchronized = true;
         }
 
         AbstractPopulatedBufferList.BufferFactory factory = new AbstractPopulatedBufferList.BufferFactory() {
+            @Override
             public Object createFreeBuffer() {
                 return new DecodeUnit();
             }
 
+            @Override
             public void cleanupObject(Object o) {
                 DecodeUnit du = (DecodeUnit) o;
 
@@ -93,9 +99,9 @@ public class VideoDepacketizer {
         };
 
         if (unsynchronized) {
-            decodedUnits = new UnsynchronizedPopulatedBufferList<DecodeUnit>(DU_LIMIT, factory);
+            decodedUnits = new UnsynchronizedPopulatedBufferList<>(DU_LIMIT, factory);
         } else {
-            decodedUnits = new AtomicPopulatedBufferList<DecodeUnit>(DU_LIMIT, factory);
+            decodedUnits = new AtomicPopulatedBufferList<>(DU_LIMIT, factory);
         }
     }
 
@@ -111,7 +117,7 @@ public class VideoDepacketizer {
         // If we reach our limit, immediately request an IDR frame
         // and reset
         if (consecutiveFrameDrops == CONSECUTIVE_DROP_LIMIT) {
-            LimeLog.warning("Reached consecutive drop limit");
+            logger.warn("Reached consecutive drop limit");
 
             // Restart the count
             consecutiveFrameDrops = 0;
@@ -187,7 +193,7 @@ public class VideoDepacketizer {
             // Construct the video decode unit
             DecodeUnit du = decodedUnits.pollFreeObject();
             if (du == null) {
-                LimeLog.warning("Video decoder is too slow! Forced to drop decode units");
+                logger.warn("Video decoder is too slow! Forced to drop decode units");
 
                 // Invalidate all frames from the start of the DU queue
                 // (0 tuple always generates an IDR frame)
@@ -265,7 +271,7 @@ public class VideoDepacketizer {
                     // Check if it's the end of the last frame
                     if (NAL.isAnnexBFrameStart(cachedSpecialDesc)) {
                         // Update the global state that we're decoding a new frame
-                        this.decodingFrame = true;
+                        decodingFrame = true;
 
                         // Reassemble any pending NAL
                         reassembleFrame(packet.getFrameIndex());
@@ -365,8 +371,8 @@ public class VideoDepacketizer {
         flags &= ~VideoPacket.FLAG_CONTAINS_PIC_DATA;
 
         // Check if it's just the start or both start and end of a frame
-        return (flags == (VideoPacket.FLAG_SOF | VideoPacket.FLAG_EOF) ||
-                flags == VideoPacket.FLAG_SOF);
+        return flags == (VideoPacket.FLAG_SOF | VideoPacket.FLAG_EOF) ||
+                flags == VideoPacket.FLAG_SOF;
     }
 
     public void addInputData(VideoPacket packet) {
@@ -394,7 +400,7 @@ public class VideoDepacketizer {
 
         // Look for a frame start before receiving a frame end
         if (firstPacket && decodingFrame) {
-            LimeLog.warning("Network dropped end of a frame");
+            logger.warn("Network dropped end of a frame");
             nextFrameNumber = frameIndex;
 
             // Unexpected start of next frame before terminating the last
@@ -409,7 +415,7 @@ public class VideoDepacketizer {
             if (flags == VideoPacket.FLAG_CONTAINS_PIC_DATA ||
                 flags == VideoPacket.FLAG_EOF ||
                 cachedReassemblyDesc.length < nominalPacketDataLength) {
-                LimeLog.warning("Network dropped beginning of a frame");
+                logger.warn("Network dropped beginning of a frame");
                 nextFrameNumber = frameIndex + 1;
 
                 waitingForNextSuccessfulFrame = true;
@@ -427,7 +433,7 @@ public class VideoDepacketizer {
         else if (firstPacket) {
             // Make sure this is the next consecutive frame
             if (SequenceHelper.isBeforeSigned(nextFrameNumber, frameIndex, true)) {
-                LimeLog.warning("Network dropped an entire frame");
+                logger.warn("Network dropped an entire frame");
                 nextFrameNumber = frameIndex;
 
                 // Wait until an IDR frame comes
@@ -447,8 +453,8 @@ public class VideoDepacketizer {
         // we need to drop it if the stream packet index
         // doesn't match
         if (!firstPacket && decodingFrame) {
-            if (streamPacketIndex != (int) (lastPacketInStream + 1)) {
-                LimeLog.warning("Network dropped middle of a frame");
+            if (streamPacketIndex != lastPacketInStream + 1) {
+                logger.warn("Network dropped middle of a frame");
                 nextFrameNumber = frameIndex + 1;
 
                 waitingForNextSuccessfulFrame = true;
@@ -461,7 +467,7 @@ public class VideoDepacketizer {
         }
 
         // Notify the server of any packet losses
-        if (streamPacketIndex != (int) (lastPacketInStream + 1)) {
+        if (streamPacketIndex != lastPacketInStream + 1) {
             // Packets were lost so report this to the server
             controlListener.connectionLostPackets(lastPacketInStream, streamPacketIndex);
         }
@@ -499,7 +505,7 @@ public class VideoDepacketizer {
 
             // If we need an IDR frame first, then drop this frame
             if (waitingForIdrFrame) {
-                LimeLog.warning("Waiting for IDR frame");
+                logger.warn("Waiting for IDR frame");
 
                 dropFrameState();
                 return;
@@ -538,7 +544,7 @@ class NAL {
     // This assumes that the buffer passed in is already a special sequence
     public static boolean isAnnexBStartSequence(ByteBufferDescriptor specialSeq) {
         // The start sequence is 00 00 01 or 00 00 00 01
-        return (specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x01);
+        return specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x01;
     }
 
     // This assumes that the buffer passed in is already a special sequence
@@ -546,13 +552,13 @@ class NAL {
         if (specialSeq.length != 4) { return false; }
 
         // The frame start sequence is 00 00 00 01
-        return (specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x01);
+        return specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x01;
     }
 
     // This assumes that the buffer passed in is already a special sequence
     public static boolean isPadding(ByteBufferDescriptor specialSeq) {
         // The padding sequence is 00 00 00
-        return (specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x00);
+        return specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x00;
     }
 
     // Returns a buffer descriptor describing the start sequence

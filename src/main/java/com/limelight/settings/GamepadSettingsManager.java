@@ -2,7 +2,9 @@ package com.limelight.settings;
 
 import java.io.File;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.input.gamepad.GamepadMapping;
 
 /**
@@ -10,6 +12,9 @@ import com.limelight.input.gamepad.GamepadMapping;
  * @author Diego Waxemberg
  */
 public abstract class GamepadSettingsManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(GamepadSettingsManager.class);
+
     private static GamepadMapping cachedSettings;
 
     /**
@@ -18,14 +23,14 @@ public abstract class GamepadSettingsManager {
      */
     public static GamepadMapping getSettings() {
         if (cachedSettings == null) {
-            LimeLog.info("Reading Gamepad Settings");
+            logger.info("Reading Gamepad Settings");
             File gamepadFile = SettingsManager.getInstance().getGamepadFile();
             GamepadMapping savedMapping = (GamepadMapping) SettingsManager.readSettings(gamepadFile,
                                                                                         GamepadMapping.class);
             cachedSettings = savedMapping;
         }
         if (cachedSettings == null) {
-            LimeLog.warning("Unable to get gamepad settings. Using default mapping instead.");
+            logger.warn("Unable to get gamepad settings. Using default mapping instead.");
             if (System.getProperty("os.name").contains("Windows")) {
                 cachedSettings = GamepadMapping.getWindowsDefaultMapping();
             } else {
@@ -42,7 +47,7 @@ public abstract class GamepadSettingsManager {
      */
     public static void writeSettings(GamepadMapping settings) {
         cachedSettings = settings;
-        LimeLog.info("Writing Gamepad Settings");
+        logger.info("Writing Gamepad Settings");
 
         File gamepadFile = SettingsManager.getInstance().getGamepadFile();
         SettingsManager.writeSettings(gamepadFile, settings);

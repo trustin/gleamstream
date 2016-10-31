@@ -1,7 +1,6 @@
 package com.limelight.nvstream.mdns;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -14,21 +13,25 @@ import javax.jmdns.ServiceEvent;
 import javax.jmdns.ServiceInfo;
 import javax.jmdns.ServiceListener;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MdnsDiscoveryAgent implements ServiceListener {
+
+    private static final Logger logger = LoggerFactory.getLogger(MdnsDiscoveryAgent.class);
+
     public static final String SERVICE_TYPE = "_nvstream._tcp.local.";
 
-    private MdnsDiscoveryListener listener;
+    private final MdnsDiscoveryListener listener;
     private Thread discoveryThread;
-    private HashMap<InetAddress, MdnsComputer> computers = new HashMap<InetAddress, MdnsComputer>();
-    private HashSet<String> pendingResolution = new HashSet<String>();
+    private final HashMap<InetAddress, MdnsComputer> computers = new HashMap<>();
+    private final HashSet<String> pendingResolution = new HashSet<>();
 
     // The resolver factory's instance member has a static lifetime which
     // means our ref count and listener must be static also.
-    private static int resolverRefCount = 0;
-    private static HashSet<ServiceListener> listeners = new HashSet<ServiceListener>();
-    private static ServiceListener nvstreamListener = new ServiceListener() {
+    private static int resolverRefCount;
+    private static final HashSet<ServiceListener> listeners = new HashSet<>();
+    private static final ServiceListener nvstreamListener = new ServiceListener() {
         @Override
         public void serviceAdded(ServiceEvent event) {
             HashSet<ServiceListener> localListeners;
@@ -37,7 +40,7 @@ public class MdnsDiscoveryAgent implements ServiceListener {
             // the callbacks without holding the listeners monitor the
             // whole time.
             synchronized (listeners) {
-                localListeners = new HashSet<ServiceListener>(listeners);
+                localListeners = new HashSet<>(listeners);
             }
 
             for (ServiceListener listener : localListeners) {
@@ -53,7 +56,7 @@ public class MdnsDiscoveryAgent implements ServiceListener {
             // the callbacks without holding the listeners monitor the
             // whole time.
             synchronized (listeners) {
-                localListeners = new HashSet<ServiceListener>(listeners);
+                localListeners = new HashSet<>(listeners);
             }
 
             for (ServiceListener listener : localListeners) {
@@ -69,7 +72,7 @@ public class MdnsDiscoveryAgent implements ServiceListener {
             // the callbacks without holding the listeners monitor the
             // whole time.
             synchronized (listeners) {
-                localListeners = new HashSet<ServiceListener>(listeners);
+                localListeners = new HashSet<>(listeners);
             }
 
             for (ServiceListener listener : localListeners) {
@@ -78,26 +81,22 @@ public class MdnsDiscoveryAgent implements ServiceListener {
         }
     };
 
-    private static JmmDNS referenceResolver() {
-        synchronized (MdnsDiscoveryAgent.class) {
-            JmmDNS instance = JmmDNS.Factory.getInstance();
-            if (++resolverRefCount == 1) {
-                // This will cause the listener to be invoked for known hosts immediately.
-                // JmDNS only supports one listener per service, so we have to do this here
-                // with a static listener.
-                instance.addServiceListener(SERVICE_TYPE, nvstreamListener);
-            }
-            return instance;
+    private static synchronized JmmDNS referenceResolver() {
+        JmmDNS instance = JmmDNS.Factory.getInstance();
+        if (++resolverRefCount == 1) {
+            // This will cause the listener to be invoked for known hosts immediately.
+            // JmDNS only supports one listener per service, so we have to do this here
+            // with a static listener.
+            instance.addServiceListener(SERVICE_TYPE, nvstreamListener);
         }
+        return instance;
     }
 
-    private static void dereferenceResolver() {
-        synchronized (MdnsDiscoveryAgent.class) {
-            if (--resolverRefCount == 0) {
-                try {
-                    JmmDNS.Factory.close();
-                } catch (IOException e) {}
-            }
+    private static synchronized void dereferenceResolver() {
+        if (--resolverRefCount == 0) {
+            try {
+                JmmDNS.Factory.close();
+            } catch (IOException ignored) {}
         }
     }
 
@@ -107,20 +106,13 @@ public class MdnsDiscoveryAgent implements ServiceListener {
 
     private void handleResolvedServiceInfo(ServiceInfo info) {
         pendingResolution.remove(info.getName());
-
-        try {
-            handleServiceInfo(info);
-        } catch (UnsupportedEncodingException e) {
-            // Invalid DNS response
-            LimeLog.info("mDNS: Invalid response for machine: " + info.getName());
-            return;
-        }
+        handleServiceInfo(info);
     }
 
-    private void handleServiceInfo(ServiceInfo info) throws UnsupportedEncodingException {
-        Inet4Address addrs[] = info.getInet4Addresses();
+    private void handleServiceInfo(ServiceInfo info) {
+        Inet4Address[] addrs = info.getInet4Addresses();
 
-        LimeLog.info("mDNS: " + info.getName() + " has " + addrs.length + " addresses");
+        logger.info("mDNS: " + info.getName() + " has " + addrs.length + " addresses");
 
         // Add a computer object for each IPv4 address reported by the PC
         for (Inet4Address addr : addrs) {
@@ -140,48 +132,45 @@ public class MdnsDiscoveryAgent implements ServiceListener {
 
         // Add our listener to the set
         synchronized (listeners) {
-            listeners.add(MdnsDiscoveryAgent.this);
+            listeners.add(this);
         }
 
-        discoveryThread = new Thread() {
-            @Override
-            public void run() {
-                // This may result in listener callbacks so we must register
-                // our listener first.
-                JmmDNS resolver = referenceResolver();
+        discoveryThread = new Thread(() -> {
+            // This may result in listener callbacks so we must register
+            // our listener first.
+            JmmDNS resolver = referenceResolver();
 
-                try {
-                    while (!Thread.interrupted()) {
-                        // Start an mDNS request
-                        resolver.requestServiceInfo(SERVICE_TYPE, null, discoveryIntervalMs);
+            try {
+                while (!Thread.interrupted()) {
+                    // Start an mDNS request
+                    resolver.requestServiceInfo(SERVICE_TYPE, null, discoveryIntervalMs);
 
-                        // Run service resolution again for pending machines
-                        ArrayList<String> pendingNames = new ArrayList<String>(pendingResolution);
-                        for (String name : pendingNames) {
-                            LimeLog.info("mDNS: Retrying service resolution for machine: " + name);
-                            ServiceInfo[] infos = resolver.getServiceInfos(SERVICE_TYPE, name, 500);
-                            if (infos != null && infos.length != 0) {
-                                LimeLog.info(
-                                        "mDNS: Resolved (retry) with " + infos.length + " service entries");
-                                for (ServiceInfo svcinfo : infos) {
-                                    handleResolvedServiceInfo(svcinfo);
-                                }
+                    // Run service resolution again for pending machines
+                    ArrayList<String> pendingNames = new ArrayList<>(pendingResolution);
+                    for (String name : pendingNames) {
+                        logger.info("mDNS: Retrying service resolution for machine: " + name);
+                        ServiceInfo[] infos = resolver.getServiceInfos(SERVICE_TYPE, name, 500);
+                        if (infos != null && infos.length != 0) {
+                            logger.info(
+                                    "mDNS: Resolved (retry) with " + infos.length + " service entries");
+                            for (ServiceInfo svcinfo : infos) {
+                                handleResolvedServiceInfo(svcinfo);
                             }
                         }
-
-                        // Wait for the next polling interval
-                        try {
-                            Thread.sleep(discoveryIntervalMs);
-                        } catch (InterruptedException e) {
-                            break;
-                        }
                     }
-                } finally {
-                    // Dereference the resolver
-                    dereferenceResolver();
+
+                    // Wait for the next polling interval
+                    try {
+                        Thread.sleep(discoveryIntervalMs);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
                 }
+            } finally {
+                // Dereference the resolver
+                dereferenceResolver();
             }
-        };
+        });
         discoveryThread.setName("mDNS Discovery Thread");
         discoveryThread.start();
     }
@@ -189,7 +178,7 @@ public class MdnsDiscoveryAgent implements ServiceListener {
     public void stopDiscovery() {
         // Remove our listener from the set
         synchronized (listeners) {
-            listeners.remove(MdnsDiscoveryAgent.this);
+            listeners.remove(this);
         }
 
         // If there's already a running thread, interrupt it
@@ -207,7 +196,7 @@ public class MdnsDiscoveryAgent implements ServiceListener {
 
     @Override
     public void serviceAdded(ServiceEvent event) {
-        LimeLog.info("mDNS: Machine appeared: " + event.getInfo().getName());
+        logger.info("mDNS: Machine appeared: " + event.getInfo().getName());
 
         ServiceInfo info = event.getDNS().getServiceInfo(SERVICE_TYPE, event.getInfo().getName(), 500);
         if (info == null) {
@@ -216,13 +205,13 @@ public class MdnsDiscoveryAgent implements ServiceListener {
             return;
         }
 
-        LimeLog.info("mDNS: Resolved (blocking)");
+        logger.info("mDNS: Resolved (blocking)");
         handleResolvedServiceInfo(info);
     }
 
     @Override
     public void serviceRemoved(ServiceEvent event) {
-        LimeLog.info("mDNS: Machine disappeared: " + event.getInfo().getName());
+        logger.info("mDNS: Machine disappeared: " + event.getInfo().getName());
 
         Inet4Address addrs[] = event.getInfo().getInet4Addresses();
         for (Inet4Address addr : addrs) {
@@ -238,7 +227,7 @@ public class MdnsDiscoveryAgent implements ServiceListener {
 
     @Override
     public void serviceResolved(ServiceEvent event) {
-        LimeLog.info("mDNS: Machine resolved (callback): " + event.getInfo().getName());
+        logger.info("mDNS: Machine resolved (callback): " + event.getInfo().getName());
         handleResolvedServiceInfo(event.getInfo());
     }
 }

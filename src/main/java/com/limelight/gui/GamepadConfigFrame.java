@@ -21,7 +21,9 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.border.LineBorder;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.input.Device;
 import com.limelight.input.DeviceListener;
 import com.limelight.input.gamepad.GamepadComponent;
@@ -39,6 +41,8 @@ import com.limelight.settings.GamepadSettingsManager;
 public class GamepadConfigFrame extends JFrame {
     private static final long serialVersionUID = 1L;
 
+    private static final Logger logger = LoggerFactory.getLogger(GamepadConfigFrame.class);
+
     private boolean configChanged;
 
     private MappingThread mappingThread;
@@ -51,7 +55,7 @@ public class GamepadConfigFrame extends JFrame {
      */
     public GamepadConfigFrame() {
         super("Gamepad Settings");
-        LimeLog.info("Creating Settings Frame");
+        logger.info("Creating Settings Frame");
         setSize(850, 550);
         setResizable(false);
         setAlwaysOnTop(true);
@@ -351,8 +355,8 @@ public class GamepadConfigFrame extends JFrame {
                     mapping.invert = value;
                     break;
                 default:
-                    LimeLog.severe("You did something terrible and should feel terrible.");
-                    LimeLog.severe("Fix it or the checkbox gods will smite you!");
+                    logger.error("You did something terrible and should feel terrible.");
+                    logger.error("Fix it or the checkbox gods will smite you!");
                     break;
             }
         }

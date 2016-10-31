@@ -1,6 +1,8 @@
 package com.limelight.nvstream.av.audio;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.SequenceHelper;
@@ -8,6 +10,8 @@ import com.limelight.nvstream.av.buffer.AbstractPopulatedBufferList;
 import com.limelight.nvstream.av.buffer.AtomicPopulatedBufferList;
 
 public class AudioDepacketizer {
+
+    private static final Logger logger = LoggerFactory.getLogger(AudioDepacketizer.class);
 
     private static final int DU_LIMIT = 30;
     private AbstractPopulatedBufferList<ByteBufferDescriptor> decodedUnits;
@@ -54,11 +58,11 @@ public class AudioDepacketizer {
         } else {
             bb = decodedUnits.pollFreeObject();
             if (bb == null) {
-                LimeLog.warning("Audio player too slow! Forced to drop decoded samples");
+                logger.warn("Audio player too slow! Forced to drop decoded samples");
                 decodedUnits.clearPopulatedObjects();
                 bb = decodedUnits.pollFreeObject();
                 if (bb == null) {
-                    LimeLog.severe("Audio player is leaking buffers!");
+                    logger.error("Audio player is leaking buffers!");
                     return;
                 }
             }
@@ -84,8 +88,8 @@ public class AudioDepacketizer {
         // out of sequence
         if (lastSequenceNumber != 0 &&
             (short) (lastSequenceNumber + 1) != seq) {
-            LimeLog.warning(
-                    "Received OOS audio data (expected " + (lastSequenceNumber + 1) + ", got " + seq + ")");
+            logger.warn(
+                    "Received OOS audio data (expected " + (lastSequenceNumber + 1) + ", got " + seq + ')');
 
             // Only tell the decoder if we got packets ahead of what we expected
             // If the packet is behind the current sequence number, drop it

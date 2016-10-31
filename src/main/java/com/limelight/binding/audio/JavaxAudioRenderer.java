@@ -8,7 +8,9 @@ import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.audio.AudioRenderer;
 
@@ -17,6 +19,8 @@ import com.limelight.nvstream.av.audio.AudioRenderer;
  * @author Cameron Gutman
  */
 public class JavaxAudioRenderer implements AudioRenderer {
+
+    private static final Logger logger = LoggerFactory.getLogger(JavaxAudioRenderer.class);
 
     private SourceDataLine soundLine;
     private SoundBuffer soundBuffer;
@@ -45,16 +49,16 @@ public class JavaxAudioRenderer implements AudioRenderer {
                 // Kinda jank. If the queued is larger than available, we are going to have a delay
                 // so we increase the buffer size
                 if (available < soundBuffer.size()) {
-                    LimeLog.warning("buffer too full, buffer size: " + soundLine.getBufferSize());
+                    logger.warn("buffer too full, buffer size: " + soundLine.getBufferSize());
                     int currentBuffer = soundLine.getBufferSize();
                     soundLine.close();
                     createSoundLine(currentBuffer * 2);
                     if (soundLine != null) {
                         available = soundLine.available();
-                        LimeLog.warning("creating new line with buffer size: " + soundLine.getBufferSize());
+                        logger.warn("creating new line with buffer size: " + soundLine.getBufferSize());
                     } else {
                         available = 0;
-                        LimeLog.warning("failed to create sound line");
+                        logger.warn("failed to create sound line");
                     }
                 }
             }

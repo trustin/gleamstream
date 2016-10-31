@@ -29,8 +29,10 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JProgressBar;
 
-import com.limelight.LimeLog;
-import com.limelight.Limelight;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.limelight.Main;
 import com.limelight.input.KeyboardHandler;
 import com.limelight.input.MouseHandler;
 import com.limelight.nvstream.NvConnection;
@@ -45,6 +47,9 @@ import com.limelight.settings.PreferencesManager.Preferences;
  *         <br>Cameron Gutman
  */
 public class StreamFrame extends JFrame {
+
+    private static final Logger logger = LoggerFactory.getLogger(StreamFrame.class);
+
     private static final long serialVersionUID = 1L;
 
     private static final double DESIRED_ASPECT_RATIO = 16.0 / 9.0;
@@ -54,7 +59,7 @@ public class StreamFrame extends JFrame {
     private JProgressBar spinner;
     private JLabel spinnerLabel;
     private Cursor noCursor;
-    private Limelight limelight;
+    private Main main;
     private RenderPanel renderingSurface;
     private Preferences userPreferences;
 
@@ -79,9 +84,9 @@ public class StreamFrame extends JFrame {
      * @param conn the connection this frame belongs to
      * @param streamConfig the configurations for this frame
      */
-    public void build(Limelight limelight, NvConnection conn, StreamConfiguration streamConfig,
+    public void build(Main main, NvConnection conn, StreamConfiguration streamConfig,
                       Preferences prefs) {
-        this.limelight = limelight;
+        this.main = main;
         userPreferences = prefs;
 
         KeyboardHandler keyboard = new KeyboardHandler(conn, this);
@@ -200,14 +205,13 @@ public class StreamFrame extends JFrame {
         }
 
         if (bestConfig != null) {
-            LimeLog.info(
+            logger.info(
                     "Using full-screen display mode " + bestConfig.getWidth() + 'x' + bestConfig.getHeight() +
                     " for " + targetConfig.getWidth() + 'x' + targetConfig.getHeight() + " stream");
         } else {
             bestConfig = aspectMatchingConfigs.get(0);
-            LimeLog.info("No matching display modes. Using largest: " + bestConfig.getWidth() + 'x' + bestConfig
-                    .getHeight() +
-                         " for " + targetConfig.getWidth() + 'x' + targetConfig.getHeight() + " stream");
+            logger.info("No matching display modes. Using largest: " + bestConfig.getWidth() + 'x' + bestConfig
+                    .getHeight() + " for " + targetConfig.getWidth() + 'x' + targetConfig.getHeight() + " stream");
         }
 
         return bestConfig;
@@ -227,7 +231,7 @@ public class StreamFrame extends JFrame {
                         gd.setDisplayMode(config);
                     }
                 } else {
-                    Limelight.displayUiMessage(
+                    Main.displayUiMessage(
                             this,
                             "Unable to change display resolution. \nThis may not be the correct resolution",
                             "Display Resolution",
@@ -235,7 +239,7 @@ public class StreamFrame extends JFrame {
                 }
             }
         } else {
-            Limelight.displayUiMessage(
+            Main.displayUiMessage(
                     this,
                     "Your operating system does not support fullscreen.",
                     "Fullscreen Unsupported",
@@ -332,9 +336,9 @@ public class StreamFrame extends JFrame {
      * Stops the stream and destroys the frame
      */
     public void close() {
-        limelight.stop();
+        main.stop();
         dispose();
-        if (Limelight.COMMAND_LINE_LAUNCH) {
+        if (Main.COMMAND_LINE_LAUNCH) {
             System.exit(0);
         }
     }

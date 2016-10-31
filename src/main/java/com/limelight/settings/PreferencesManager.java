@@ -4,21 +4,25 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.Random;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Manages user preferences
  * @author Diego Waxemberg
  */
 public abstract class PreferencesManager {
-    private static Preferences cachedPreferences = null;
+
+    private static final Logger logger = LoggerFactory.getLogger(PreferencesManager.class);
+
+    private static Preferences cachedPreferences;
 
     /**
      * Writes the specified preferences to the preferences file and updates the cached preferences.
      * @param prefs the preferences to be written out
      */
     public static void writePreferences(Preferences prefs) {
-        LimeLog.info("Writing Preferences");
+        logger.info("Writing Preferences");
         File prefFile = SettingsManager.getInstance().getSettingsFile();
 
         SettingsManager.writeSettings(prefFile, prefs);
@@ -40,13 +44,12 @@ public abstract class PreferencesManager {
      */
     public static Preferences getPreferences() {
         if (cachedPreferences == null) {
-            LimeLog.info("Reading Preferences");
+            logger.info("Reading Preferences");
             File prefFile = SettingsManager.getInstance().getSettingsFile();
-            Preferences savedPref = (Preferences) SettingsManager.readSettings(prefFile, Preferences.class);
-            cachedPreferences = savedPref;
+            cachedPreferences = (Preferences) SettingsManager.readSettings(prefFile, Preferences.class);
         }
         if (cachedPreferences == null) {
-            LimeLog.warning("Unable to get preferences, using default");
+            logger.warn("Unable to get preferences, using default");
             cachedPreferences = new Preferences();
             writePreferences(cachedPreferences);
         }
@@ -66,15 +69,15 @@ public abstract class PreferencesManager {
         public enum Resolution {
             RES_720_30(1280, 720, 30, 5), RES_720_60(1280, 720, 60, 10),
             RES_1080_30(1920, 1080, 30, 10), RES_1080_60(1920, 1080, 60, 20);
-            public int width;
-            public int height;
-            public int frameRate;
-            public int defaultBitrate;
+            public final int width;
+            public final int height;
+            public final int frameRate;
+            public final int defaultBitrate;
 
             /**
              * Creates a new resolution with the specified name
              */
-            private Resolution(int width, int height, int frameRate, int defaultBitrate) {
+            Resolution(int width, int height, int frameRate, int defaultBitrate) {
                 this.width = width;
                 this.height = height;
                 this.frameRate = frameRate;
@@ -100,13 +103,11 @@ public abstract class PreferencesManager {
             }
         }
 
-        ;
-
         private Resolution res;
         private int bitrate;
         private boolean fullscreen;
         private String host;
-        private String uniqueId;
+        private final String uniqueId;
         private boolean localAudio;
         private boolean allowResolutionChange;
         private boolean keepAspectRatio;
@@ -123,18 +124,18 @@ public abstract class PreferencesManager {
 
         /**
          * Constructs a preference with the specified values
-         * @param res the <code>Resolution</code> to use
+         * @param res the {@code Resolution} to use
          * @param fullscreen whether to start the stream in fullscreen
          */
         private Preferences(Resolution res, boolean fullscreen) {
             this.res = res;
-            this.bitrate = res.defaultBitrate;
+            bitrate = res.defaultBitrate;
             this.fullscreen = fullscreen;
-            this.host = "GeForce PC host";
-            this.uniqueId = String.format("%016x", new Random().nextLong());
-            this.localAudio = false;
-            this.allowResolutionChange = true;
-            this.keepAspectRatio = true;
+            host = "GeForce PC host";
+            uniqueId = String.format("%016x", new Random().nextLong());
+            localAudio = false;
+            allowResolutionChange = true;
+            keepAspectRatio = true;
         }
 
         /**

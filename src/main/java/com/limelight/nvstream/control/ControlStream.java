@@ -9,7 +9,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
@@ -17,6 +19,8 @@ import com.limelight.nvstream.enet.EnetConnection;
 import com.limelight.utils.TimeHelper;
 
 public class ControlStream implements ConnectionStatusListener, InputPacketSender {
+
+    private static final Logger logger = LoggerFactory.getLogger(ControlStream.class);
 
     private static final int TCP_PORT = 47995;
     private static final int UDP_PORT = 47999;
@@ -30,7 +34,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private static final int IDX_LOSS_STATS = 3;
     private static final int IDX_INPUT_DATA = 5;
 
-    private static final short packetTypesGen3[] = {
+    private static final short[] packetTypesGen3 = {
             0x1407, // Request IDR frame
             0x1410, // Start B
             0x1404, // Invalidate reference frames
@@ -38,7 +42,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             0x1417, // Frame Stats (unused)
             -1,     // Input data (unused)
     };
-    private static final short packetTypesGen4[] = {
+    private static final short[] packetTypesGen4 = {
             0x0606, // Request IDR frame
             0x0609, // Start B
             0x0604, // Invalidate reference frames
@@ -46,7 +50,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             0x0611, // Frame Stats (unused)
             -1,     // Input data (unused)
     };
-    private static final short packetTypesGen5[] = {
+    private static final short[] packetTypesGen5 = {
             0x0305, // Start A
             0x0307, // Start B
             0x0301, // Invalidate reference frames
@@ -54,7 +58,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             0x0204, // Frame Stats (unused)
             0x0207, // Input data
     };
-    private static final short packetTypesGen7[] = {
+    private static final short[] packetTypesGen7 = {
             0x0305, // Start A
             0x0307, // Start B
             0x0301, // Invalidate reference frames
@@ -63,7 +67,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             0x0206, // Input data
     };
 
-    private static final short payloadLengthsGen3[] = {
+    private static final short[] payloadLengthsGen3 = {
             -1, // Request IDR frame
             16, // Start B
             24, // Invalidate reference frames
@@ -71,7 +75,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             64, // Frame Stats
             -1, // Input Data
     };
-    private static final short payloadLengthsGen4[] = {
+    private static final short[] payloadLengthsGen4 = {
             -1, // Request IDR frame
             -1, // Start B
             24, // Invalidate reference frames
@@ -79,7 +83,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             64, // Frame Stats
             -1, // Input Data
     };
-    private static final short payloadLengthsGen5[] = {
+    private static final short[] payloadLengthsGen5 = {
             -1, // Start A
             16, // Start B
             24, // Invalidate reference frames
@@ -87,7 +91,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             80, // Frame Stats
             -1, // Input Data
     };
-    private static final short payloadLengthsGen7[] = {
+    private static final short[] payloadLengthsGen7 = {
             -1, // Start A
             16, // Start B
             24, // Invalidate reference frames
@@ -96,7 +100,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             -1, // Input Data
     };
 
-    private static final byte[] precontructedPayloadsGen3[] = {
+    private static final byte[][] precontructedPayloadsGen3 = {
             new byte[] { 0, 0 }, // Request IDR frame
             null, // Start B
             null, // Invalidate reference frames
@@ -104,7 +108,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             null, // Frame Stats
             null, // Input Data
     };
-    private static final byte[] precontructedPayloadsGen4[] = {
+    private static final byte[][] precontructedPayloadsGen4 = {
             new byte[] { 0, 0 }, // Request IDR frame
             new byte[] { 0 },  // Start B
             null, // Invalidate reference frames
@@ -112,7 +116,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             null, // Frame Stats
             null, // Input Data
     };
-    private static final byte[] precontructedPayloadsGen5[] = {
+    private static final byte[][] precontructedPayloadsGen5 = {
             new byte[] { 0, 0 }, // Start A
             null, // Start B
             null, // Invalidate reference frames
@@ -120,7 +124,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             null, // Frame Stats
             null, // Input Data
     };
-    private static final byte[] precontructedPayloadsGen7[] = {
+    private static final byte[][] precontructedPayloadsGen7 = {
             new byte[] { 0, 0 }, // Start A
             null, // Start B
             null, // Invalidate reference frames
@@ -135,7 +139,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private int lastSeenFrame;
     private int lossCountSinceLastReport;
 
-    private ConnectionContext context;
+    private final ConnectionContext context;
 
     // If we drop at least 10 frames in 15 second (or less) window
     // more than 5 times in 60 seconds, we'll display a warning
@@ -163,8 +167,8 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
 
     private Thread lossStatsThread;
     private Thread resyncThread;
-    private LinkedBlockingQueue<int[]> invalidReferenceFrameTuples = new LinkedBlockingQueue<int[]>();
-    private boolean aborting = false;
+    private final LinkedBlockingQueue<int[]> invalidReferenceFrameTuples = new LinkedBlockingQueue<>();
+    private boolean aborting;
     private boolean forceIdrRequest;
 
     private final short[] packetTypes;
@@ -217,27 +221,23 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         }
     }
 
-    private void sendPacket(NvCtlPacket packet) throws IOException {
+    private synchronized void sendPacket(NvCtlPacket packet) throws IOException {
         // Prevent multiple clients from writing to the stream at the same time
-        synchronized (this) {
-            if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
-                enetConnection.pumpSocket();
-                packet.write(enetConnection);
-            } else {
-                packet.write(out);
-                out.flush();
-            }
+        if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
+            enetConnection.pumpSocket();
+            packet.write(enetConnection);
+        } else {
+            packet.write(out);
+            out.flush();
         }
     }
 
-    private void sendAndDiscardReply(NvCtlPacket packet) throws IOException {
-        synchronized (this) {
-            sendPacket(packet);
-            if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
-                enetConnection.readPacket(0, CONTROL_TIMEOUT);
-            } else {
-                new NvCtlResponse(in);
-            }
+    private synchronized void sendAndDiscardReply(NvCtlPacket packet) throws IOException {
+        sendPacket(packet);
+        if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
+            enetConnection.readPacket(0, CONTROL_TIMEOUT);
+        } else {
+            new NvCtlResponse(in);
         }
     }
 
@@ -255,6 +255,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                                    payloadLengths[IDX_LOSS_STATS], bb.array()));
     }
 
+    @Override
     public void sendInputPacket(byte[] data, short length) throws IOException {
         sendPacket(new NvCtlPacket(packetTypes[IDX_INPUT_DATA], length, data));
     }
@@ -458,11 +459,11 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                                                 preconstructedPayloads[IDX_REQUEST_IDR_FRAME]));
         }
 
-        LimeLog.warning("IDR frame request sent");
+        logger.warn("IDR frame request sent");
     }
 
     private void invalidateReferenceFrames(int firstLostFrame, int nextSuccessfulFrame) throws IOException {
-        LimeLog.warning("Invalidating reference frames from " + firstLostFrame + " to " + nextSuccessfulFrame);
+        logger.warn("Invalidating reference frames from " + firstLostFrame + " to " + nextSuccessfulFrame);
 
         ByteBuffer conf = ByteBuffer.wrap(new byte[payloadLengths[IDX_INVALIDATE_REF_FRAMES]]).order(
                 ByteOrder.LITTLE_ENDIAN);
@@ -474,7 +475,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         sendAndDiscardReply(new NvCtlPacket(packetTypes[IDX_INVALIDATE_REF_FRAMES],
                                             payloadLengths[IDX_INVALIDATE_REF_FRAMES], conf.array()));
 
-        LimeLog.warning("Reference frame invalidation sent");
+        logger.warn("Reference frame invalidation sent");
     }
 
     static class NvCtlPacket {
@@ -486,7 +487,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         private static final ByteBuffer serializationBuffer = ByteBuffer.allocate(256).order(
                 ByteOrder.LITTLE_ENDIAN);
 
-        public NvCtlPacket(InputStream in) throws IOException {
+        NvCtlPacket(InputStream in) throws IOException {
             // Use the class's static header buffer for parsing the header
             synchronized (headerBuffer) {
                 int offset = 0;
@@ -526,7 +527,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             }
         }
 
-        public NvCtlPacket(byte[] packet) {
+        NvCtlPacket(byte[] packet) {
             synchronized (headerBuffer) {
                 headerBuffer.rewind();
 
@@ -543,12 +544,12 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             }
         }
 
-        public NvCtlPacket(short type, short paylen) {
+        NvCtlPacket(short type, short paylen) {
             this.type = type;
             this.paylen = paylen;
         }
 
-        public NvCtlPacket(short type, short paylen, byte[] payload) {
+        NvCtlPacket(short type, short paylen, byte[] payload) {
             this.type = type;
             this.paylen = paylen;
             this.payload = payload;
@@ -597,22 +598,22 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         }
     }
 
-    class NvCtlResponse extends NvCtlPacket {
+    static class NvCtlResponse extends NvCtlPacket {
         public short status;
 
-        public NvCtlResponse(InputStream in) throws IOException {
+        NvCtlResponse(InputStream in) throws IOException {
             super(in);
         }
 
-        public NvCtlResponse(short type, short paylen) {
+        NvCtlResponse(short type, short paylen) {
             super(type, paylen);
         }
 
-        public NvCtlResponse(short type, short paylen, byte[] payload) {
+        NvCtlResponse(short type, short paylen, byte[] payload) {
             super(type, paylen, payload);
         }
 
-        public NvCtlResponse(byte[] payload) {
+        NvCtlResponse(byte[] payload) {
             super(payload);
         }
 
@@ -629,6 +630,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         invalidReferenceFrameTuples.add(new int[] { firstLostFrame, nextSuccessfulFrame });
     }
 
+    @Override
     public void connectionDetectedFrameLoss(int firstLostFrame, int nextSuccessfulFrame) {
         resyncConnection(firstLostFrame, nextSuccessfulFrame);
 
@@ -664,6 +666,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         }
     }
 
+    @Override
     public void connectionSinkTooSlow(int firstLostFrame, int nextSuccessfulFrame) {
         resyncConnection(firstLostFrame, nextSuccessfulFrame);
 
@@ -680,16 +683,19 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         }
     }
 
+    @Override
     public void connectionReceivedCompleteFrame(int frameIndex) {
         lastGoodFrame = frameIndex;
     }
 
+    @Override
     public void connectionSawFrame(int frameIndex) {
         lastSeenFrame = frameIndex;
     }
 
+    @Override
     public void connectionLostPackets(int lastReceivedPacket, int nextReceivedPacket) {
         // Update the loss count for the next loss report
-        lossCountSinceLastReport += (nextReceivedPacket - lastReceivedPacket) - 1;
+        lossCountSinceLastReport += nextReceivedPacket - lastReceivedPacket - 1;
     }
 }

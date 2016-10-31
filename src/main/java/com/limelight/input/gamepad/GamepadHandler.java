@@ -2,7 +2,9 @@ package com.limelight.input.gamepad;
 
 import java.util.HashMap;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.input.Device;
 import com.limelight.input.DeviceListener;
 import com.limelight.input.gamepad.GamepadMapping.Mapping;
@@ -17,6 +19,8 @@ import com.limelight.settings.GamepadSettingsManager;
  * @author Diego Waxemberg
  */
 public class GamepadHandler implements DeviceListener {
+
+    private static final Logger logger = LoggerFactory.getLogger(GamepadHandler.class);
 
     private class Gamepad {
         public short controllerNumber;
@@ -33,26 +37,26 @@ public class GamepadHandler implements DeviceListener {
 
         public void assignControllerNumber() {
             for (short i = 0; i < 4; i++) {
-                if ((currentControllers & (1 << i)) == 0) {
-                    currentControllers |= (1 << i);
-                    LimeLog.info("Assigned controller " + i);
+                if ((currentControllers & 1 << i) == 0) {
+                    currentControllers |= 1 << i;
+                    logger.info("Assigned controller " + i);
                     controllerNumber = i;
                     return;
                 }
             }
 
             controllerNumber = 0;
-            LimeLog.info("No controller numbers left; using 0");
+            logger.info("No controller numbers left; using 0");
         }
 
         public void releaseControllerNumber() {
-            LimeLog.info("Controller " + controllerNumber + " is now available");
+            logger.info("Controller " + controllerNumber + " is now available");
             currentControllers &= ~(1 << controllerNumber);
         }
     }
 
     private NvConnection conn;
-    private HashMap<Device, Gamepad> gamepads = new HashMap<Device, Gamepad>();
+    private final HashMap<Device, Gamepad> gamepads = new HashMap<>();
     private int currentControllers;
 
     public GamepadHandler(NvConnection conn) {
@@ -82,6 +86,7 @@ public class GamepadHandler implements DeviceListener {
         this.conn = conn;
     }
 
+    @Override
     public void handleButton(Device device, int buttonId, boolean pressed) {
         Gamepad gamepad = getGamepad(device, true);
         Mapping mapped = gamepad.mapping.get(new SourceComponent(Type.BUTTON, buttonId, null));
@@ -100,8 +105,9 @@ public class GamepadHandler implements DeviceListener {
         //printInfo(device, new SourceComponent(Type.BUTTON, buttonId), mapped.padComp, pressed ? 1F : 0F);
     }
 
+    @Override
     public void handleAxis(Device device, int axisId, float newValue, float lastValue) {
-        Direction mappedDir = null;
+        Direction mappedDir;
         if (newValue == 0) {
             if (lastValue > 0) {
                 mappedDir = Direction.POSITIVE;
@@ -123,7 +129,7 @@ public class GamepadHandler implements DeviceListener {
         if (mapped.padComp.isAnalog()) {
             handleAnalogComponent(gamepad, mapped.padComp, value);
         } else {
-            handleDigitalComponent(gamepad, mapped, (Math.abs(value) > 0.5));
+            handleDigitalComponent(gamepad, mapped, Math.abs(value) > 0.5);
         }
 
         //used for debugging
@@ -190,7 +196,7 @@ public class GamepadHandler implements DeviceListener {
                 gamepad.rightTrigger = (byte) (Math.abs(value) * 0xFF);
                 break;
             default:
-                LimeLog.warning("A mapping error has occured. Ignoring: " + padComp.name());
+                logger.warn("A mapping error has occured. Ignoring: " + padComp.name());
                 break;
         }
 
@@ -245,7 +251,7 @@ public class GamepadHandler implements DeviceListener {
                 toggleButton(gamepad, ControllerPacket.SPECIAL_BUTTON_FLAG, pressed);
                 break;
             default:
-                LimeLog.warning("A mapping error has occured. Ignoring: " + mapped.padComp.name());
+                logger.warn("A mapping error has occurred. Ignoring: " + mapped.padComp.name());
                 return;
         }
 
@@ -276,10 +282,10 @@ public class GamepadHandler implements DeviceListener {
 
         builder.append(sourceComp.getType().name() + ": ");
         builder.append(sourceComp.getId() + " ");
-        builder.append("mapped to: " + padComp + " ");
+        builder.append("mapped to: " + padComp + ' ');
         builder.append("changed to " + value);
 
-        LimeLog.info(builder.toString());
+        logger.info(builder.toString());
     }
 
     /*

@@ -8,6 +8,9 @@ import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.binding.PlatformBinding;
 import com.limelight.gui.MainFrame;
 import com.limelight.gui.StreamFrame;
@@ -31,7 +34,9 @@ import com.limelight.settings.PreferencesManager.Preferences.Resolution;
  * @author Diego Waxemberg<br>
  * Cameron Gutman
  */
-public class Limelight implements NvConnectionListener {
+public class Main implements NvConnectionListener {
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
+
     public static boolean COMMAND_LINE_LAUNCH;
 
     private final String host;
@@ -58,7 +63,7 @@ public class Limelight implements NvConnectionListener {
      * Constructs a new instance based on the given host
      * @param host can be hostname or IP address.
      */
-    public Limelight(String host) {
+    public Main(String host) {
         this.host = host;
     }
 
@@ -73,7 +78,7 @@ public class Limelight implements NvConnectionListener {
         conn = new NvConnection(host, prefs.getUniqueId(), this, streamConfig,
                                 PlatformBinding.getCryptoProvider());
         streamFrame.build(this, conn, streamConfig, prefs);
-        conn.start(PlatformBinding.getDeviceName(), streamFrame,
+        conn.start(streamFrame,
                    VideoDecoderRenderer.FLAG_PREFER_QUALITY,
                    PlatformBinding.getAudioRenderer(),
                    decoderRenderer);
@@ -129,13 +134,13 @@ public class Limelight implements NvConnectionListener {
      * @param host the host pc to connect to. Can be a hostname or IP address.
      */
     public static void createInstance(String host, String appName) {
-        Limelight limelight = new Limelight(host);
+        Main main = new Main(host);
 
         Preferences prefs = PreferencesManager.getPreferences();
         StreamConfiguration streamConfig = createConfiguration(prefs.getResolution(), prefs.getBitrate(),
                                                                appName, prefs.getLocalAudio());
 
-        limelight.startUp(streamConfig, prefs);
+        main.startUp(streamConfig, prefs);
     }
 
     /**
@@ -264,8 +269,8 @@ public class Limelight implements NvConnectionListener {
         prefs.setFullscreen(fullscreen);
         prefs.setLocalAudio(localAudio);
 
-        Limelight limelight = new Limelight(host);
-        limelight.startUp(streamConfig, prefs);
+        Main main = new Main(host);
+        main.startUp(streamConfig, prefs);
         COMMAND_LINE_LAUNCH = true;
     }
 
@@ -296,7 +301,7 @@ public class Limelight implements NvConnectionListener {
      */
     @Override
     public void stageStarting(Stage stage) {
-        LimeLog.info("Starting " + stage.getName());
+        logger.info("Starting " + stage.getName());
         streamFrame.showSpinner(stage);
     }
 
@@ -357,7 +362,7 @@ public class Limelight implements NvConnectionListener {
         NvHTTP httpConn;
         try {
             httpConn = new NvHTTP(InetAddress.getByName(host),
-                                  uniqueId, PlatformBinding.getDeviceName(),
+                                  uniqueId,
                                   PlatformBinding.getCryptoProvider());
             try {
                 String serverInfo = httpConn.getServerInfo();
@@ -420,7 +425,7 @@ public class Limelight implements NvConnectionListener {
     @Override
     public void displayTransientMessage(String message) {
         // FIXME: Implement transient GUI messages
-        LimeLog.info(message);
+        logger.info(message);
     }
 }
 

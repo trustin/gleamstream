@@ -13,7 +13,7 @@ public class MouseButtonPacket extends InputPacket {
     private static final int PACKET_TYPE = 0x5;
     private static final int PAYLOAD_LENGTH = 5;
     private static final int PACKET_LENGTH = PAYLOAD_LENGTH +
-                                             InputPacket.HEADER_LENGTH;
+                                             HEADER_LENGTH;
 
     private static final byte PRESS_EVENT = 0x07;
     private static final byte RELEASE_EVENT = 0x08;

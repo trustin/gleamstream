@@ -4,10 +4,8 @@ import java.awt.BorderLayout;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Toolkit;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
 import java.awt.event.KeyEvent;
 import java.net.InetAddress;
 import java.util.HashMap;
@@ -25,8 +23,10 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 
-import com.limelight.LimeLog;
-import com.limelight.Limelight;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.limelight.Main;
 import com.limelight.nvstream.mdns.MdnsComputer;
 import com.limelight.nvstream.mdns.MdnsDiscoveryAgent;
 import com.limelight.nvstream.mdns.MdnsDiscoveryListener;
@@ -40,14 +40,14 @@ import com.limelight.settings.PreferencesManager.Preferences;
  *         <br>Cameron Gutman
  */
 public class MainFrame {
+
+    private static final Logger logger = LoggerFactory.getLogger(MainFrame.class);
+
     private JTextField hostField;
-    private JButton pair;
-    private JButton stream;
     private JFrame limeFrame;
     private JComboBox<String> mdnsHostList;
 
     private HashMap<String, InetAddress> mdnsHosts;
-    private MdnsDiscoveryAgent mdnsAgent;
 
     /**
      * Gets the actual JFrame this class creates
@@ -60,25 +60,16 @@ public class MainFrame {
     /*
      * Creates the menu bar for the user to go to preferences, mappings, etc.
      */
-    private JMenuBar createMenuBar() {
+    private static JMenuBar createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
         JMenu optionsMenu = new JMenu("Options");
         JMenuItem gamepadSettings = new JMenuItem("Gamepad Settings");
         JMenuItem generalSettings = new JMenuItem("Preferences");
-        generalSettings.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, (Toolkit.getDefaultToolkit()
-                                                                                         .getMenuShortcutKeyMask())));
+        generalSettings.setAccelerator(KeyStroke.getKeyStroke(
+                KeyEvent.VK_COMMA, Toolkit.getDefaultToolkit().getMenuShortcutKeyMask()));
 
-        gamepadSettings.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                new GamepadConfigFrame().build();
-            }
-        });
-
-        generalSettings.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                new PreferencesFrame().build();
-            }
-        });
+        gamepadSettings.addActionListener(e -> new GamepadConfigFrame().build());
+        generalSettings.addActionListener(e -> new PreferencesFrame().build());
 
         optionsMenu.add(gamepadSettings);
         optionsMenu.add(generalSettings);
@@ -92,17 +83,15 @@ public class MainFrame {
      * Creates the listener for the stream button- starts the stream process
      */
     private ActionListener createStreamButtonListener() {
-        return new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                String host = hostField.getText();
-                Preferences prefs = PreferencesManager.getPreferences();
-                if (!host.equals(prefs.getHost())) {
-                    prefs.setHost(host);
-                    PreferencesManager.writePreferences(prefs);
-                }
-                // Limelight.createInstance(host);
-                showApps();
+        return e -> {
+            String host = hostField.getText();
+            Preferences prefs = PreferencesManager.getPreferences();
+            if (!host.equals(prefs.getHost())) {
+                prefs.setHost(host);
+                PreferencesManager.writePreferences(prefs);
             }
+            // Limelight.createInstance(host);
+            showApps();
         };
     }
 
@@ -110,22 +99,16 @@ public class MainFrame {
      * Creates the listener for the pair button- requests a pairing with the specified host
      */
     private ActionListener createPairButtonListener() {
-        return new ActionListener() {
-            public void actionPerformed(ActionEvent arg0) {
-                new Thread(new Runnable() {
-                    public void run() {
-                        Preferences prefs = PreferencesManager.getPreferences();
+        return arg0 -> new Thread(() -> {
+            Preferences prefs = PreferencesManager.getPreferences();
 
-                        // Save preferences to preserve possibly new unique ID
-                        PreferencesManager.writePreferences(prefs);
+            // Save preferences to preserve possibly new unique ID
+            PreferencesManager.writePreferences(prefs);
 
-                        String msg = Limelight.pair(prefs.getUniqueId(), hostField.getText());
-                        Limelight.displayUiMessage(limeFrame, msg, "Moonlight",
-                                                   JOptionPane.INFORMATION_MESSAGE);
-                    }
-                }).start();
-            }
-        };
+            String msg = Main.pair(prefs.getUniqueId(), hostField.getText());
+            Main.displayUiMessage(limeFrame, msg, "Moonlight",
+                                  JOptionPane.INFORMATION_MESSAGE);
+        }).start();
     }
 
     /**
@@ -150,18 +133,18 @@ public class MainFrame {
         hostField.setSelectionStart(0);
         hostField.setSelectionEnd(hostField.getText().length());
 
-        stream = new JButton("Show App List");
+        JButton stream = new JButton("Show App List");
         stream.addActionListener(createStreamButtonListener());
 
-        pair = new JButton("Pair");
+        JButton pair = new JButton("Pair");
         pair.addActionListener(createPairButtonListener());
         pair.setToolTipText("Send pair request to GeForce PC");
 
-        mdnsHosts = new HashMap<String, InetAddress>();
-        mdnsHostList = new JComboBox<String>();
+        mdnsHosts = new HashMap<>();
+        mdnsHostList = new JComboBox<>();
         mdnsHostList.addItem("Choose a local PC...");
 
-        mdnsAgent = new MdnsDiscoveryAgent(new MdnsDiscoveryListener() {
+        MdnsDiscoveryAgent mdnsAgent = new MdnsDiscoveryAgent(new MdnsDiscoveryListener() {
             @Override
             public void notifyComputerAdded(MdnsComputer computer) {
                 if (!mdnsHosts.containsKey(computer.getName())) {
@@ -173,12 +156,12 @@ public class MainFrame {
             @Override
             public void notifyComputerRemoved(MdnsComputer computer) {
                 // We'll keep any host we've seen before around, as users will find it convenient
-                LimeLog.info("Computer lost: " + computer.getName());
+                logger.info("Computer lost: " + computer.getName());
             }
 
             @Override
             public void notifyDiscoveryFailure(Exception e) {
-                LimeLog.warning("Discovery failure");
+                logger.warn("Discovery failure");
                 e.printStackTrace();
             }
 
@@ -186,11 +169,9 @@ public class MainFrame {
         mdnsAgent.startDiscovery(1000);
 
         // Propagate selections from mDNS to the hosts field
-        mdnsHostList.addItemListener(new ItemListener() {
-            public void itemStateChanged(ItemEvent e) {
-                if (e.getStateChange() == ItemEvent.SELECTED && mdnsHostList.getSelectedIndex() != 0) {
-                    hostField.setText((String) mdnsHosts.get(mdnsHostList.getSelectedItem()).getHostAddress());
-                }
+        mdnsHostList.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED && mdnsHostList.getSelectedIndex() != 0) {
+                hostField.setText(mdnsHosts.get(mdnsHostList.getSelectedItem()).getHostAddress());
             }
         });
 

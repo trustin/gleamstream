@@ -1,8 +1,12 @@
 package com.limelight.nvstream.http;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NvApp {
+
+    private static final Logger logger = LoggerFactory.getLogger(NvApp.class);
+
     private String appName = "";
     private int appId;
     private boolean initialized;
@@ -16,7 +20,7 @@ public class NvApp {
     public NvApp(String appName, int appId) {
         this.appName = appName;
         this.appId = appId;
-        this.initialized = true;
+        initialized = true;
     }
 
     public void setAppName(String appName) {
@@ -26,26 +30,26 @@ public class NvApp {
     public void setAppId(String appId) {
         try {
             this.appId = Integer.parseInt(appId);
-            this.initialized = true;
+            initialized = true;
         } catch (NumberFormatException e) {
-            LimeLog.warning("Malformed app ID: " + appId);
+            logger.warn("Malformed app ID: " + appId);
         }
     }
 
     public void setAppId(int appId) {
         this.appId = appId;
-        this.initialized = true;
+        initialized = true;
     }
 
     public String getAppName() {
-        return this.appName;
+        return appName;
     }
 
     public int getAppId() {
-        return this.appId;
+        return appId;
     }
 
     public boolean isInitialized() {
-        return this.initialized;
+        return initialized;
     }
 }

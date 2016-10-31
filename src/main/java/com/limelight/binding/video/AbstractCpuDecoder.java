@@ -32,14 +32,17 @@ import java.util.Map.Entry;
 
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.DoublePointer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.limelight.LimeLog;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.DecodeUnit;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.av.video.VideoDepacketizer;
 
 public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
+
+    private static final Logger logger = LoggerFactory.getLogger(AbstractCpuDecoder.class);
 
     static {
         avcodec_register_all();
@@ -93,7 +96,7 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
                 return false;
         }
 
-        LimeLog.info("Video codec: " + codec.name().getString());
+        logger.info("Video codec: " + codec.name().getString());
 
         ctx = avcodec_alloc_context3(codec);
         ctx.pix_fmt(AV_PIX_FMT_YUV420P);
@@ -183,7 +186,7 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
 
         if (decoderBuffer.capacity() < decodeUnit.getDataLength() + AV_INPUT_BUFFER_PADDING_SIZE) {
             int newCapacity = (int) (1.15f * decodeUnit.getDataLength()) + AV_INPUT_BUFFER_PADDING_SIZE;
-            LimeLog.info(
+            logger.info(
                     "Reallocating decoder buffer from " + decoderBuffer.capacity() + " to " + newCapacity
                     + " bytes");
 

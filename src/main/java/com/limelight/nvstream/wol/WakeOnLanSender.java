@@ -6,11 +6,16 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.Scanner;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.http.ComputerDetails;
 
 public class WakeOnLanSender {
-    private static final int[] PORTS_TO_TRY = new int[] {
+
+    private static final Logger logger = LoggerFactory.getLogger(WakeOnLanSender.class);
+
+    private static final int[] PORTS_TO_TRY = {
             7, 9, // Standard WOL ports
             47998, 47999, 48000 // Ports opened by GFE
     };
@@ -48,7 +53,7 @@ public class WakeOnLanSender {
             try {
                 macBytes[i] = (byte) Integer.parseInt(scan.next(), 16);
             } catch (NumberFormatException e) {
-                LimeLog.warning("Malformed MAC address: " + macAddress + " (index: " + i + ")");
+                logger.warn("Malformed MAC address: " + macAddress + " (index: " + i + ')');
                 break;
             }
         }

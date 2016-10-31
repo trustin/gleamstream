@@ -10,7 +10,7 @@ public class MouseScrollPacket extends InputPacket {
     private static final int PACKET_TYPE = 0xa;
     private static final int PAYLOAD_LENGTH = 10;
     private static final int PACKET_LENGTH = PAYLOAD_LENGTH +
-                                             InputPacket.HEADER_LENGTH;
+                                             HEADER_LENGTH;
 
     private int headerCode;
     private short scroll;

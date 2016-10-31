@@ -21,7 +21,7 @@ public class MultiControllerPacket extends InputPacket {
 
     private static final short PAYLOAD_LENGTH = 30;
     private static final short PACKET_LENGTH = PAYLOAD_LENGTH +
-                                               InputPacket.HEADER_LENGTH;
+                                               HEADER_LENGTH;
 
     short controllerNumber;
     short buttonFlags;

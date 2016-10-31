@@ -3,10 +3,15 @@ package com.limelight.nvstream.av;
 import java.util.Iterator;
 import java.util.LinkedList;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.utils.TimeHelper;
 
 public class RtpReorderQueue {
+
+    private static final Logger logger = LoggerFactory.getLogger(RtpReorderQueue.class);
+
     private final int maxSize;
     private final int maxQueueTime;
     private final LinkedList<RtpQueueEntry> queue;
@@ -22,24 +27,22 @@ public class RtpReorderQueue {
         REJECTED
     }
 
-    ;
-
     public RtpReorderQueue() {
-        this.maxSize = 16;
-        this.maxQueueTime = 40;
-        this.queue = new LinkedList<RtpQueueEntry>();
+        maxSize = 16;
+        maxQueueTime = 40;
+        queue = new LinkedList<>();
 
-        this.oldestQueuedTime = Long.MAX_VALUE;
-        this.nextRtpSequenceNumber = Short.MAX_VALUE;
+        oldestQueuedTime = Long.MAX_VALUE;
+        nextRtpSequenceNumber = Short.MAX_VALUE;
     }
 
     public RtpReorderQueue(int maxSize, int maxQueueTime) {
         this.maxSize = maxSize;
         this.maxQueueTime = maxQueueTime;
-        this.queue = new LinkedList<RtpQueueEntry>();
+        queue = new LinkedList<>();
 
-        this.oldestQueuedTime = Long.MAX_VALUE;
-        this.nextRtpSequenceNumber = Short.MAX_VALUE;
+        oldestQueuedTime = Long.MAX_VALUE;
+        nextRtpSequenceNumber = Short.MAX_VALUE;
     }
 
     private boolean queuePacket(boolean head, RtpPacketFields packet) {
@@ -120,8 +123,8 @@ public class RtpReorderQueue {
 
         // Check that the queue's time constraint is satisfied
         if (TimeHelper.getMonotonicMillis() - oldestQueuedTime > maxQueueTime) {
-            LimeLog.info("Returning RTP packet queued for too long: " + (TimeHelper.getMonotonicMillis()
-                                                                         - oldestQueuedTime));
+            logger.info("Returning RTP packet queued for too long: " +
+                        (TimeHelper.getMonotonicMillis() - oldestQueuedTime));
             dequeuePacket = true;
         }
 
@@ -129,7 +132,7 @@ public class RtpReorderQueue {
         // because this is validating that the queue will meet constraints _after_
         // the current packet is enqueued.
         if (!dequeuePacket && queue.size() == maxSize - 1) {
-            LimeLog.info("Returning RTP packet after queue overgrowth");
+            logger.info("Returning RTP packet after queue overgrowth");
             dequeuePacket = true;
         }
 
@@ -185,7 +188,7 @@ public class RtpReorderQueue {
                 if (queuePacket(false, packet)) {
                     // Constraint validation may have changed the oldest packet to one that
                     // matches the next sequence number
-                    return (lowestEntry != null) ? RtpQueueStatus.QUEUED_PACKETS_READY :
+                    return lowestEntry != null ? RtpQueueStatus.QUEUED_PACKETS_READY :
                            RtpQueueStatus.QUEUED_NOTHING_READY;
                 } else {
                     return RtpQueueStatus.REJECTED;
@@ -225,7 +228,7 @@ public class RtpReorderQueue {
         return queuedEntry.packet;
     }
 
-    private class RtpQueueEntry {
+    private static class RtpQueueEntry {
         public RtpPacketFields packet;
 
         public short sequenceNumber;

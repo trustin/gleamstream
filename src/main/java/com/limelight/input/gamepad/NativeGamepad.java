@@ -1,9 +1,14 @@
 package com.limelight.input.gamepad;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.utils.NativeLibraries;
 
 public final class NativeGamepad {
+
+    private static final Logger logger = LoggerFactory.getLogger(NativeGamepad.class);
+
     public static final int DEFAULT_DEVICE_POLLING_ITERATIONS = 400;
     public static final int DEFAULT_EVENT_POLLING_INTERVAL = 5;
 
@@ -135,12 +140,12 @@ public final class NativeGamepad {
     }
 
     public static void deviceAttachCallback(int deviceId, int numButtons, int numAxes) {
-        LimeLog.info(deviceId + " has attached.");
+        logger.info(deviceId + " has attached.");
         GamepadListener.deviceAttached(deviceId, numButtons, numAxes);
     }
 
     public static void deviceRemoveCallback(int deviceId) {
-        LimeLog.info(deviceId + " has detached.");
+        logger.info(deviceId + " has detached.");
         GamepadListener.deviceRemoved(deviceId);
     }
 

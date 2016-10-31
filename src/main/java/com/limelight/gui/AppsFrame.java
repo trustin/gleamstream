@@ -2,14 +2,10 @@ package com.limelight.gui;
 
 import java.awt.Dimension;
 import java.awt.Toolkit;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -25,10 +21,11 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingWorker;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xmlpull.v1.XmlPullParserException;
 
-import com.limelight.LimeLog;
-import com.limelight.Limelight;
+import com.limelight.Main;
 import com.limelight.binding.PlatformBinding;
 import com.limelight.nvstream.http.GfeHttpResponseException;
 import com.limelight.nvstream.http.NvApp;
@@ -42,11 +39,14 @@ import com.limelight.settings.PreferencesManager;
  */
 public class AppsFrame extends JFrame {
     private static final long serialVersionUID = 1L;
+
+    private static final Logger logger = LoggerFactory.getLogger(AppsFrame.class);
+
     // Connection to the host
     private NvHTTP httpConnection;
-    private String host;
+    private final String host;
 
-    private Map<String, NvApp> apps;
+    private final Map<String, NvApp> apps;
 
     // UI Elements
     private JComboBox<String> appSelector;
@@ -69,12 +69,7 @@ public class AppsFrame extends JFrame {
                     }
 
                     // Sort the fetched list alphabetically by app name
-                    Collections.sort(fetched, new Comparator<NvApp>() {
-                        @Override
-                        public int compare(NvApp left, NvApp right) {
-                            return left.getAppName().compareTo(right.getAppName());
-                        }
-                    });
+                    fetched.sort(Comparator.comparing(NvApp::getAppName));
 
                     appSelector.removeAllItems();
 
@@ -91,9 +86,9 @@ public class AppsFrame extends JFrame {
 //                    	}
                     }
                 } catch (InterruptedException e) {
-                    LimeLog.warning("Failed to get list of apps; interrupted by " + e);
+                    logger.warn("Failed to get list of apps; interrupted by " + e);
                 } catch (ExecutionException e) {
-                    LimeLog.warning("Failed to get list of apps; broken by " + e);
+                    logger.warn("Failed to get list of apps; broken by " + e);
                 }
             }
         };
@@ -104,10 +99,10 @@ public class AppsFrame extends JFrame {
         super("Apps on " + host);
         this.host = host;
 
-        apps = new HashMap<String, NvApp>();
+        apps = new HashMap<>();
 
-        this.setSize(400, 115);
-        this.setResizable(false);
+        setSize(400, 115);
+        setResizable(false);
     }
 
     /**
@@ -115,10 +110,9 @@ public class AppsFrame extends JFrame {
      */
     public void build() {
         try {
-            this.httpConnection = new NvHTTP(InetAddress.getByName(host),
-                                             PreferencesManager.getPreferences().getUniqueId(),
-                                             PlatformBinding.getDeviceName(),
-                                             PlatformBinding.getCryptoProvider());
+            httpConnection = new NvHTTP(InetAddress.getByName(host),
+                                        PreferencesManager.getPreferences().getUniqueId(),
+                                        PlatformBinding.getCryptoProvider());
         } catch (UnknownHostException e) {
             JOptionPane.showMessageDialog(null, "Unable to resolve machine address",
                                           "Moonlight", JOptionPane.ERROR_MESSAGE);
@@ -128,20 +122,18 @@ public class AppsFrame extends JFrame {
         JPanel mainPanel = new JPanel();
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
 
-        appSelector = new JComboBox<String>();
+        appSelector = new JComboBox<>();
         appSelector.addItem("Loading apps...");
 
-        appSelector.addItemListener(new ItemListener() {
-            public void itemStateChanged(ItemEvent e) {
-                if (e.getStateChange() == ItemEvent.SELECTED && appSelector.getSelectedIndex() != -1) {
-                    NvApp app = apps.get(appSelector.getSelectedItem());
+        appSelector.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED && appSelector.getSelectedIndex() != -1) {
+                NvApp app = apps.get(appSelector.getSelectedItem());
 //                    if (app.getIsRunning()) {
 //                    	launchButton.setText("Resume");
 //                    }
 //                    else {
-                    launchButton.setText("Launch");
+                launchButton.setText("Launch");
 //                    }
-                }
             }
         });
 
@@ -149,26 +141,18 @@ public class AppsFrame extends JFrame {
         fetchAppList();
 
         launchButton = new JButton("Launch");
-        launchButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String appName = (String) appSelector.getSelectedItem();
-                NvApp app = apps.get(appName);
-                if (app != null) {
-                    launchApp(app.getAppName());
-                } else {
-                    launchApp("Steam");
-                }
+        launchButton.addActionListener(e -> {
+            String appName = (String) appSelector.getSelectedItem();
+            NvApp app = apps.get(appName);
+            if (app != null) {
+                launchApp(app.getAppName());
+            } else {
+                launchApp("Steam");
             }
         });
 
         quitButton = new JButton("Quit Running App");
-        quitButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent arg0) {
-                quitApp();
-            }
-        });
+        quitButton.addActionListener(arg0 -> quitApp());
         quitButton.setEnabled(false);
 
         getRootPane().setDefaultButton(launchButton);
@@ -191,14 +175,14 @@ public class AppsFrame extends JFrame {
         mainPanel.add(launchBox);
         mainPanel.add(Box.createVerticalGlue());
 
-        this.getContentPane().add(mainPanel);
+        getContentPane().add(mainPanel);
 
         Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
         //center on screen
-        this.setLocation((int) dim.getWidth() / 2 - this.getWidth() / 2,
-                         (int) dim.getHeight() / 2 - this.getHeight() / 2);
+        setLocation((int) dim.getWidth() / 2 - getWidth() / 2,
+                         (int) dim.getHeight() / 2 - getHeight() / 2);
 
-        this.setVisible(true);
+        setVisible(true);
     }
 
     private LinkedList<NvApp> fetchApps() {
@@ -207,17 +191,17 @@ public class AppsFrame extends JFrame {
             return httpConnection.getAppList();
         } catch (GfeHttpResponseException e) {
             if (e.getErrorCode() == 401) {
-                Limelight.displayUiMessage(null, "Not paired with computer",
-                                           "Moonlight", JOptionPane.ERROR_MESSAGE);
+                Main.displayUiMessage(null, "Not paired with computer",
+                                      "Moonlight", JOptionPane.ERROR_MESSAGE);
             } else {
-                Limelight.displayUiMessage(null, "GFE error: " + e.getErrorMessage() + " (Error Code: " + e
-                                                   .getErrorCode() + ")",
-                                           "Moonlight", JOptionPane.ERROR_MESSAGE);
+                Main.displayUiMessage(null, "GFE error: " + e.getErrorMessage() + " (Error Code: " + e
+                                                   .getErrorCode() + ')',
+                                      "Moonlight", JOptionPane.ERROR_MESSAGE);
             }
             setVisible(false);
         } catch (Exception e) {
-            Limelight.displayUiMessage(null, "Unable to retrieve app list",
-                                       "Moonlight", JOptionPane.ERROR_MESSAGE);
+            Main.displayUiMessage(null, "Unable to retrieve app list",
+                                  "Moonlight", JOptionPane.ERROR_MESSAGE);
             setVisible(false);
         }
 
@@ -225,8 +209,8 @@ public class AppsFrame extends JFrame {
     }
 
     private void launchApp(String appName) {
-        this.setVisible(false);
-        Limelight.createInstance(host, appName);
+        setVisible(false);
+        Main.createInstance(host, appName);
     }
 
     private void quitApp() {
@@ -234,9 +218,7 @@ public class AppsFrame extends JFrame {
 
         try {
             quit = httpConnection.quitApp();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (XmlPullParserException e) {
+        } catch (IOException | XmlPullParserException e) {
             e.printStackTrace();
         }
 
@@ -244,11 +226,11 @@ public class AppsFrame extends JFrame {
             // Update the app list again
             fetchAppList();
 
-            Limelight.displayUiMessage(null, "Successfully quit app",
-                                       "Moonlight", JOptionPane.INFORMATION_MESSAGE);
+            Main.displayUiMessage(null, "Successfully quit app",
+                                  "Moonlight", JOptionPane.INFORMATION_MESSAGE);
         } else {
-            Limelight.displayUiMessage(null, "Failed to quit app",
-                                       "Moonlight", JOptionPane.ERROR_MESSAGE);
+            Main.displayUiMessage(null, "Failed to quit app",
+                                  "Moonlight", JOptionPane.ERROR_MESSAGE);
         }
     }
 }

@@ -10,7 +10,7 @@ public class MouseMovePacket extends InputPacket {
     private static final int PACKET_TYPE = 0x8;
     private static final int PAYLOAD_LENGTH = 8;
     private static final int PACKET_LENGTH = PAYLOAD_LENGTH +
-                                             InputPacket.HEADER_LENGTH;
+                                             HEADER_LENGTH;
 
     private int headerCode;
 

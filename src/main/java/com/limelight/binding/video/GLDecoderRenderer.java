@@ -17,6 +17,8 @@ import java.util.Queue;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.avutil.AVFrame;
 import org.jctools.queues.SpscArrayQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL2;
@@ -27,7 +29,6 @@ import com.jogamp.opengl.GLProfile;
 import com.jogamp.opengl.awt.GLCanvas;
 import com.jogamp.opengl.util.FPSAnimator;
 import com.jogamp.opengl.util.awt.TextRenderer;
-import com.limelight.LimeLog;
 import com.limelight.gui.RenderPanel;
 import com.limelight.gui.StreamFrame;
 import com.limelight.nvstream.av.video.VideoDepacketizer;
@@ -38,6 +39,8 @@ import com.limelight.nvstream.av.video.VideoDepacketizer;
  * Time: 11:42 PM.
  */
 public class GLDecoderRenderer extends AbstractCpuDecoder implements GLEventListener {
+
+    private static final Logger logger = LoggerFactory.getLogger(GLDecoderRenderer.class);
 
     private final GLCanvas glcanvas;
     private FPSAnimator animator;
@@ -99,7 +102,7 @@ public class GLDecoderRenderer extends AbstractCpuDecoder implements GLEventList
 
         animator = new FPSAnimator(glcanvas, targetFps * 2);
 
-        LimeLog.info("Using OpenGL rendering");
+        logger.info("Using OpenGL rendering");
 
         return true;
     }

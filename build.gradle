@@ -1,7 +1,7 @@
 apply plugin: 'java'
 apply plugin: 'application'
 
-mainClassName = "com.limelight.Limelight"
+mainClassName = "com.limelight.Main"
 applicationDefaultJvmArgs = [
         '-DGleamStream',
         '-server',
@@ -54,6 +54,7 @@ dependencies {
     }
     // SLF4J
     compile "org.slf4j:slf4j-api:${versionOf('slf4j')}"
+    runtime "org.slf4j:slf4j-simple:${versionOf('slf4j')}"
     // TinyRTSP
     compile files('lib/tinyrtsp.jar')
     // XPP3

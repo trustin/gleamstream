@@ -8,7 +8,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
-import com.limelight.LimeLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.DecodeUnit;
@@ -16,6 +18,9 @@ import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
 
 public class VideoStream {
+
+    private static final Logger logger = LoggerFactory.getLogger(VideoStream.class);
+
     private static final int RTP_PORT = 47998;
     private static final int FIRST_FRAME_PORT = 47996;
 
@@ -35,7 +40,7 @@ public class VideoStream {
     private DatagramChannel rtp;
     private Socket firstFrameSocket;
 
-    private final LinkedList<Thread> threads = new LinkedList<Thread>();
+    private final LinkedList<Thread> threads = new LinkedList<>();
 
     private final ConnectionContext context;
     private final ConnectionStatusListener avConnListener;
@@ -246,7 +251,7 @@ public class VideoStream {
                             ringIndex = (ringIndex + 1) % VIDEO_RING_SIZE;
                             if (ringIndex == iterationStart) {
                                 // Reinitialize the video ring since they're all being used
-                                LimeLog.warning("Packet ring wrapped around!");
+                                logger.warn("Packet ring wrapped around!");
                                 for (int i = 0; i < VIDEO_RING_SIZE; i++) {
                                     ring[i] = new VideoPacket(new byte[requiredBufferSize], !directSubmit);
                                 }
