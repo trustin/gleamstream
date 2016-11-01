@@ -1,9 +1,6 @@
-package com.limelight.binding.video;
+package kr.motd.gleamstream;
 
-import static org.bytedeco.javacpp.avcodec.AVCodec;
-import static org.bytedeco.javacpp.avcodec.AVCodecContext;
 import static org.bytedeco.javacpp.avcodec.AVCodecContext.FF_THREAD_SLICE;
-import static org.bytedeco.javacpp.avcodec.AVPacket;
 import static org.bytedeco.javacpp.avcodec.AV_CODEC_FLAG2_FAST;
 import static org.bytedeco.javacpp.avcodec.AV_CODEC_FLAG_LOW_DELAY;
 import static org.bytedeco.javacpp.avcodec.AV_CODEC_ID_H264;
@@ -16,22 +13,24 @@ import static org.bytedeco.javacpp.avcodec.avcodec_open2;
 import static org.bytedeco.javacpp.avcodec.avcodec_receive_frame;
 import static org.bytedeco.javacpp.avcodec.avcodec_register_all;
 import static org.bytedeco.javacpp.avcodec.avcodec_send_packet;
-import static org.bytedeco.javacpp.avutil.AVDictionary;
-import static org.bytedeco.javacpp.avutil.AVFrame;
 import static org.bytedeco.javacpp.avutil.AV_PIX_FMT_BGR0;
 import static org.bytedeco.javacpp.avutil.AV_PIX_FMT_YUV420P;
 import static org.bytedeco.javacpp.avutil.AV_SAMPLE_FMT_U8;
 import static org.bytedeco.javacpp.avutil.av_frame_alloc;
 import static org.bytedeco.javacpp.swscale.SWS_FAST_BILINEAR;
-import static org.bytedeco.javacpp.swscale.SwsContext;
 import static org.bytedeco.javacpp.swscale.sws_getContext;
 import static org.bytedeco.javacpp.swscale.sws_scale;
 
 import java.nio.ByteBuffer;
-import java.util.Map.Entry;
 
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.DoublePointer;
+import org.bytedeco.javacpp.avcodec.AVCodec;
+import org.bytedeco.javacpp.avcodec.AVCodecContext;
+import org.bytedeco.javacpp.avcodec.AVPacket;
+import org.bytedeco.javacpp.avutil.AVDictionary;
+import org.bytedeco.javacpp.avutil.AVFrame;
+import org.bytedeco.javacpp.swscale.SwsContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,9 +39,11 @@ import com.limelight.nvstream.av.DecodeUnit;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.av.video.VideoDepacketizer;
 
-public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
+import kr.motd.gleamstream.FFmpegFramePool.FFmpegFrame;
 
-    private static final Logger logger = LoggerFactory.getLogger(AbstractCpuDecoder.class);
+final class FFmpegVideoDecoderRenderer extends VideoDecoderRenderer {
+
+    private static final Logger logger = LoggerFactory.getLogger(FFmpegVideoDecoderRenderer.class);
 
     static {
         avcodec_register_all();
@@ -50,39 +51,36 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
 
     private static final int DECODER_BUFFER_SIZE = 256 * 1024;
 
-    protected int width, height, targetFps;
-    protected AVCodecContext ctx;
-    AVFrame decFrame;
-    FramePool framePool;
-    SwsContext scalerCtx;
+    private final MainWindow mainWindow;
+    private final FFmpegFramePool framePool;
+    private AVCodecContext ctx;
+    private AVFrame decFrame;
+    private SwsContext scalerCtx;
     private AVPacket packet;
 
     private Thread decoderThread;
-    protected volatile boolean dying;
+    private volatile boolean dying;
 
     private ByteBuffer decoderBuffer;
 
     private int totalFrames;
     private long totalDecoderTimeMs;
 
-    public abstract boolean setupInternal(Object renderTarget, int drFlags);
-
-    // VideoDecoderRenderer abstract method @Overrides
+    FFmpegVideoDecoderRenderer(MainWindow mainWindow, FFmpegFramePool framePool) {
+        this.mainWindow = mainWindow;
+        this.framePool = framePool;
+    }
 
     /**
      * Sets up the decoder and renderer to render video at the specified dimensions
-     *
      * @param width the width of the video to render
      * @param height the height of the video to render
-     * @param renderTarget what to render the video onto
      * @param drFlags flags for the decoder and renderer
      */
     @Override
-    public boolean setup(VideoFormat format, int width, int height, int redrawRate, Object renderTarget,
-                         int drFlags) {
-        this.width = width;
-        this.height = height;
-        targetFps = redrawRate;
+    public boolean setup(VideoFormat format, int width, int height, int drFlags) {
+        assert framePool.width() == width;
+        assert framePool.height() == height;
 
         final AVCodec codec;
         switch (format) {
@@ -114,7 +112,6 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
 
         int result = avcodec_open2(ctx, codec, (AVDictionary) null);
         decFrame = av_frame_alloc();
-        framePool = new FramePool(ctx.width(), ctx.height());
         scalerCtx = sws_getContext(
                 ctx.width(), ctx.height(), ctx.pix_fmt(), ctx.width(), ctx.height(), AV_PIX_FMT_BGR0,
                 SWS_FAST_BILINEAR, null, null, (DoublePointer) null);
@@ -123,7 +120,7 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
 
         decoderBuffer = ByteBuffer.allocateDirect(DECODER_BUFFER_SIZE + AV_INPUT_BUFFER_PADDING_SIZE);
 
-        return setupInternal(renderTarget, drFlags);
+        return true;
     }
 
     /**
@@ -217,19 +214,19 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
         }
 
         // Convert the YUV image to RGB
-        Entry<AVFrame, BytePointer> e;
+        FFmpegFrame e;
         try {
             e = framePool.acquire();
         } catch (InterruptedException e1) {
             return;
         }
 
-//        http://stackoverflow.com/questions/22456884/how-to-render-androids-yuv-nv21-camera-image-on-the-background-in-libgdx-with-o
-        AVFrame rgbFrame = e.getKey();
+        // http://stackoverflow.com/questions/22456884/how-to-render-androids-yuv-nv21-camera-image-on-the-background-in-libgdx-with-o
+        AVFrame rgbFrame = e.avFrame();
         sws_scale(scalerCtx, decFrame.data(), decFrame.linesize(), 0, ctx.height(), rgbFrame.data(),
                   rgbFrame.linesize());
 
-        drawFrame(e);
+        mainWindow.addFrame(e);
 
         long timeAfterDecode = System.nanoTime() / 1000000L;
 
@@ -239,10 +236,6 @@ public abstract class AbstractCpuDecoder extends VideoDecoderRenderer {
             totalDecoderTimeMs += delta;
             totalFrames++;
         }
-    }
-
-    protected void drawFrame(Entry<AVFrame, BytePointer> e) {
-        framePool.release(e);
     }
 
     @Override

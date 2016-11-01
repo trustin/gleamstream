@@ -21,16 +21,21 @@ import javax.crypto.SecretKey;
 import javax.crypto.ShortBufferException;
 import javax.crypto.spec.IvParameterSpec;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.control.InputPacketSender;
 
 public class ControllerStream {
 
-    private final static int PORT = 35043;
+    private static final Logger logger = LoggerFactory.getLogger(ControllerStream.class);
 
-    private final static int CONTROLLER_TIMEOUT = 10000;
+    private static final int PORT = 35043;
 
-    private ConnectionContext context;
+    private static final int CONTROLLER_TIMEOUT = 10000;
+
+    private final ConnectionContext context;
 
     // Only used on Gen 4 or below servers
     private Socket s;
@@ -39,13 +44,13 @@ public class ControllerStream {
     // Used on Gen 5+ servers
     private InputPacketSender controlSender;
 
-    private InputCipher cipher;
+    private final InputCipher cipher;
 
     private Thread inputThread;
-    private LinkedBlockingQueue<InputPacket> inputQueue = new LinkedBlockingQueue<InputPacket>();
+    private final LinkedBlockingQueue<InputPacket> inputQueue = new LinkedBlockingQueue<>();
 
-    private ByteBuffer stagingBuffer = ByteBuffer.allocate(128);
-    private ByteBuffer sendBuffer = ByteBuffer.allocate(128).order(ByteOrder.BIG_ENDIAN);
+    private final ByteBuffer stagingBuffer = ByteBuffer.allocate(128);
+    private final ByteBuffer sendBuffer = ByteBuffer.allocate(128).order(ByteOrder.BIG_ENDIAN);
 
     public ControllerStream(ConnectionContext context) {
         this.context = context;
@@ -86,7 +91,7 @@ public class ControllerStream {
                     try {
                         packet = inputQueue.take();
                     } catch (InterruptedException e) {
-                        context.connListener.connectionTerminated(e);
+                        // Interrupted
                         return;
                     }
 
@@ -129,7 +134,7 @@ public class ControllerStream {
                             try {
                                 sendPacket(initialMouseMove);
                             } catch (IOException e) {
-                                context.connListener.connectionTerminated(e);
+                                logger.warn("Failed to send a packet:", e);
                                 return;
                             }
 
@@ -172,7 +177,7 @@ public class ControllerStream {
                         try {
                             sendPacket(packet);
                         } catch (IOException e) {
-                            context.connListener.connectionTerminated(e);
+                            logger.warn("Failed to send a packet", e);
                             return;
                         }
                     } else {
@@ -180,7 +185,7 @@ public class ControllerStream {
                         try {
                             sendPacket(packet);
                         } catch (IOException e) {
-                            context.connListener.connectionTerminated(e);
+                            logger.warn("Failed to send a packet", e);
                             return;
                         }
                     }
@@ -304,17 +309,18 @@ public class ControllerStream {
         queuePacket(new MouseScrollPacket(context, scrollClicks));
     }
 
-    private static interface InputCipher {
-        public void initialize(SecretKey key, byte[] iv);
+    private interface InputCipher {
+        void initialize(SecretKey key, byte[] iv);
 
-        public int getEncryptedSize(int plaintextSize);
+        int getEncryptedSize(int plaintextSize);
 
-        public void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset);
+        void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset);
     }
 
     private static class AesCbcCipher implements InputCipher {
         private Cipher cipher;
 
+        @Override
         public void initialize(SecretKey key, byte[] iv) {
             try {
                 cipher = Cipher.getInstance("AES/CBC/NoPadding");
@@ -330,21 +336,22 @@ public class ControllerStream {
             }
         }
 
+        @Override
         public int getEncryptedSize(int plaintextSize) {
             // CBC requires padding to the next multiple of 16
-            return ((plaintextSize + 15) / 16) * 16;
+            return (plaintextSize + 15) / 16 * 16;
         }
 
         private int inPlacePadData(byte[] data, int length) {
             // This implements the PKCS7 padding algorithm
 
-            if ((length % 16) == 0) {
+            if (length % 16 == 0) {
                 // Already a multiple of 16
                 return length;
             }
 
             int paddedLength = getEncryptedSize(length);
-            byte paddingByte = (byte) (16 - (length % 16));
+            byte paddingByte = (byte) (16 - length % 16);
 
             for (int i = length; i < paddedLength; i++) {
                 data[i] = paddingByte;
@@ -353,6 +360,7 @@ public class ControllerStream {
             return paddedLength;
         }
 
+        @Override
         public void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset) {
             int encryptedLength = inPlacePadData(inputData, inputLength);
             try {
@@ -367,6 +375,7 @@ public class ControllerStream {
         private SecretKey key;
         private byte[] iv;
 
+        @Override
         public int getEncryptedSize(int plaintextSize) {
             // GCM uses no padding + 16 bytes tag for message authentication
             return plaintextSize + 16;

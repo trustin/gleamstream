@@ -321,14 +321,14 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                         sendLossStats(bb);
                         lossCountSinceLastReport = 0;
                     } catch (IOException e) {
-                        context.connListener.connectionTerminated(e);
-                        return;
+                        logger.warn("Failed to send loss stats", e);
+                        break;
                     }
 
                     try {
                         Thread.sleep(LOSS_REPORT_INTERVAL_MS);
                     } catch (InterruptedException e) {
-                        context.connListener.connectionTerminated(e);
+                        // Interrupted
                         return;
                     }
                 }
@@ -349,7 +349,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                     try {
                         tuple = invalidReferenceFrameTuples.take();
                     } catch (InterruptedException e) {
-                        context.connListener.connectionTerminated(e);
+                        // Interrupted
                         return;
                     }
 
@@ -389,8 +389,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                             invalidateReferenceFrames(tuple[0], tuple[1]);
                         }
                     } catch (IOException e) {
-                        context.connListener.connectionTerminated(e);
-                        return;
+                        logger.warn("Failed to request an IDR frame", e);
                     }
                 }
             }
@@ -655,7 +654,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             }
 
             if (++lossEventCount == LOSS_EVENTS_TO_WARN) {
-                context.connListener.displayTransientMessage("Poor network connection");
+                logger.warn("Poor network connection");
 
                 lossEventCount = 0;
                 lossEventTimestamp = 0;
@@ -677,7 +676,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         }
 
         if (++slowSinkCount == MAX_SLOW_SINK_COUNT) {
-            context.connListener.displayTransientMessage(
+            logger.warn(
                     "Your device is processing the A/V data too slowly. Try lowering stream resolution and/or frame rate.");
             slowSinkCount = -MAX_SLOW_SINK_COUNT * MESSAGE_DELAY_FACTOR;
         }

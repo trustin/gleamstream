@@ -1,5 +1,7 @@
 package com.limelight.nvstream;
 
+import static kr.motd.gleamstream.Panic.panic;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -45,7 +47,6 @@ public class NvConnection {
 
     // Start parameters
     private int drFlags;
-    private Object videoRenderTarget;
     private AudioRenderer audioRenderer;
 
     public NvConnection(String host, String uniqueId, NvConnectionListener listener, StreamConfiguration config,
@@ -109,27 +110,23 @@ public class NvConnection {
 
         context.serverAppVersion = h.getServerAppVersionQuad(serverInfo);
         if (context.serverAppVersion == null) {
-            context.connListener.displayMessage("Server version malformed");
-            return false;
+            throw panic("Server version malformed");
         }
 
         int majorVersion = context.serverAppVersion[0];
         logger.info("Server major version: " + majorVersion);
 
         if (majorVersion == 0) {
-            context.connListener.displayMessage("Server version malformed");
-            return false;
+            throw panic("Server version malformed");
         }
         if (majorVersion < 3) {
             // Even though we support major version 3 (2.1.x), GFE 2.2.2 is preferred.
-            context.connListener.displayMessage(
+            throw panic(
                     "This app requires GeForce Experience 2.2.2 or later. Please upgrade GFE on your PC and try again.");
-            return false;
         }
         if (majorVersion > 7) {
             // Warn the user but allow them to continue
-            context.connListener.displayTransientMessage(
-                    "This version of GFE is not currently supported. You may experience issues until this app is updated.");
+            logger.warn("This version of GFE is not currently supported. You may experience issues until this app is updated.");
         }
 
         switch (majorVersion) {
@@ -152,8 +149,7 @@ public class NvConnection {
         }
 
         if (h.getPairState(serverInfo) != PairingManager.PairState.PAIRED) {
-            context.connListener.displayMessage("Device not paired with computer");
-            return false;
+            throw panic("Device not paired with computer");
         }
 
         //
@@ -163,7 +159,7 @@ public class NvConnection {
         // Check for a supported stream resolution
         if (context.streamConfig.getHeight() >= 2160 && !h.supports4K(serverInfo)) {
             // Client wants 4K but the server can't do it
-            context.connListener.displayTransientMessage(
+            logger.warn(
                     "Your PC does not have a supported GPU or GFE version for 4K streaming. The stream will be 1080p.");
 
             // Lower resolution to 1080p
@@ -173,7 +169,7 @@ public class NvConnection {
         } else if (context.streamConfig.getHeight() >= 2160 && context.streamConfig.getRefreshRate() >= 60 && !h
                 .supports4K60(serverInfo)) {
             // Client wants 4K 60 FPS but the server can't do it
-            context.connListener.displayTransientMessage(
+            logger.warn(
                     "Your GPU does not support 4K 60 FPS streaming. The stream will be 4K 30 FPS.");
 
             context.negotiatedWidth = context.streamConfig.getWidth();
@@ -198,9 +194,8 @@ public class NvConnection {
                     "Using deprecated app lookup method - Please specify an app ID in your StreamConfiguration instead");
             app = h.getAppByName(context.streamConfig.getApp().getAppName());
             if (app == null) {
-                context.connListener.displayMessage(
+                throw panic(
                         "The app " + context.streamConfig.getApp().getAppName() + " is not in GFE app list");
-                return false;
             }
         }
 
@@ -209,8 +204,7 @@ public class NvConnection {
             try {
                 if (h.getCurrentGame(serverInfo) == app.getAppId()) {
                     if (!h.resumeApp(context)) {
-                        context.connListener.displayMessage("Failed to resume existing session");
-                        return false;
+                        throw panic("Failed to resume existing session");
                     }
                 } else {
                     return quitAndLaunch(h, app);
@@ -219,17 +213,14 @@ public class NvConnection {
                 if (e.getErrorCode() == 470) {
                     // This is the error you get when you try to resume a session that's not yours.
                     // Because this is fairly common, we'll display a more detailed message.
-                    context.connListener.displayMessage("This session wasn't started by this device," +
-                                                        " so it cannot be resumed. End streaming on the original "
-                                                        +
-                                                        "device or the PC itself and try again. (Error code: "
-                                                        + e.getErrorCode() + ')');
-                    return false;
+                    throw panic("This session wasn't started by this device," +
+                                " so it cannot be resumed. End streaming on the original " +
+                                "device or the PC itself and try again. (Error code: " +
+                                e.getErrorCode() + ')');
                 } else if (e.getErrorCode() == 525) {
-                    context.connListener.displayMessage(
+                    throw panic(
                             "The application is minimized. Resume it on the PC manually or " +
                             "quit the session and start streaming again.");
-                    return false;
                 } else {
                     throw e;
                 }
@@ -246,17 +237,14 @@ public class NvConnection {
                                                                 XmlPullParserException {
         try {
             if (!h.quitApp()) {
-                context.connListener.displayMessage(
+                throw panic(
                         "Failed to quit previous session! You must quit it manually");
-                return false;
             }
         } catch (GfeHttpResponseException e) {
             if (e.getErrorCode() == 599) {
-                context.connListener.displayMessage("This session wasn't started by this device," +
-                                                    " so it cannot be quit. End streaming on the original " +
-                                                    "device or the PC itself. (Error code: " + e.getErrorCode()
-                                                    + ')');
-                return false;
+                throw panic("This session wasn't started by this device," +
+                            " so it cannot be quit. End streaming on the original " +
+                            "device or the PC itself. (Error code: " + e.getErrorCode() + ')');
             } else {
                 throw e;
             }
@@ -269,8 +257,7 @@ public class NvConnection {
             throws IOException, XmlPullParserException {
         // Launch the app since it's not running
         if (!h.launchApp(context, app.getAppId())) {
-            context.connListener.displayMessage("Failed to launch application");
-            return false;
+            throw panic("Failed to launch application");
         }
 
         logger.info("Launched new game session");
@@ -293,7 +280,7 @@ public class NvConnection {
 
     private boolean startVideoStream() throws IOException {
         videoStream = new VideoStream(context, controlStream);
-        return videoStream.startVideoStream(videoRenderTarget, drFlags);
+        return videoStream.startVideoStream(drFlags);
     }
 
     private boolean startAudioStream() throws IOException {
@@ -316,12 +303,6 @@ public class NvConnection {
     private void establishConnection() {
         for (NvConnectionListener.Stage currentStage : NvConnectionListener.Stage.values()) {
             boolean success = false;
-
-            if (currentStage == NvConnectionListener.Stage.LAUNCH_APP) {
-                // Display the app name instead of the stage name
-                NvConnectionListener.Stage.LAUNCH_APP.setName(context.streamConfig.getApp().getAppName());
-            }
-
             context.connListener.stageStarting(currentStage);
             try {
                 switch (currentStage) {
@@ -350,9 +331,8 @@ public class NvConnection {
                         break;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
-                context.connListener.displayMessage(e.getMessage());
                 success = false;
+                throw panic("Unexpected exception:", e);
             }
 
             if (success) {
@@ -363,22 +343,19 @@ public class NvConnection {
             }
         }
 
-        context.connListener.connectionStarted();
+        logger.info("Connection has been started");
     }
 
-    public void start(Object videoRenderTarget, int drFlags,
-                      AudioRenderer audioRenderer, VideoDecoderRenderer videoDecoderRenderer) {
+    public void start(int drFlags, AudioRenderer audioRenderer, VideoDecoderRenderer videoDecoderRenderer) {
         this.drFlags = drFlags;
         this.audioRenderer = audioRenderer;
-        this.videoRenderTarget = videoRenderTarget;
         context.videoDecoderRenderer = videoDecoderRenderer;
 
         new Thread(() -> {
             try {
                 context.serverAddress = InetAddress.getByName(host);
             } catch (UnknownHostException e) {
-                context.connListener.connectionTerminated(e);
-                return;
+                throw panic("Connection has been terminated", e);
             }
 
             establishConnection();

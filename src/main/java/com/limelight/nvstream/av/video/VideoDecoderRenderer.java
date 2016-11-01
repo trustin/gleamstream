@@ -43,8 +43,8 @@ public abstract class VideoDecoderRenderer {
                 "CAPABILITY_DIRECT_SUBMIT requires overriding directSubmitDecodeUnit()");
     }
 
-    public abstract boolean setup(VideoFormat format, int width, int height, int redrawRate,
-                                  Object renderTarget, int drFlags);
+    public abstract boolean setup(VideoFormat format, int width, int height,
+                                  int drFlags);
 
     public abstract boolean start(VideoDepacketizer depacketizer);
 

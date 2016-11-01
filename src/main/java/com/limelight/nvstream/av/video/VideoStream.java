@@ -1,10 +1,13 @@
 package com.limelight.nvstream.av.video;
 
+import static kr.motd.gleamstream.Panic.panic;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
@@ -126,7 +129,7 @@ public class VideoStream {
         rtp.connect(new InetSocketAddress(context.serverAddress, RTP_PORT));
     }
 
-    public boolean setupDecoderRenderer(VideoDecoderRenderer decRend, Object renderTarget, int drFlags) {
+    public boolean setupDecoderRenderer(VideoDecoderRenderer decRend, int drFlags) {
         this.decRend = decRend;
 
         depacketizer = new VideoDepacketizer(context, avConnListener, context.streamConfig.getMaxPacketSize());
@@ -134,8 +137,7 @@ public class VideoStream {
         if (decRend != null) {
             try {
                 if (!decRend.setup(context.negotiatedVideoFormat, context.negotiatedWidth,
-                                   context.negotiatedHeight, context.negotiatedFps,
-                                   renderTarget, drFlags)) {
+                                   context.negotiatedHeight, drFlags)) {
                     return false;
                 }
 
@@ -154,9 +156,9 @@ public class VideoStream {
         return true;
     }
 
-    public boolean startVideoStream(Object renderTarget, int drFlags) throws IOException {
+    public boolean startVideoStream(int drFlags) throws IOException {
         // Setup the decoder and renderer
-        if (!setupDecoderRenderer(context.videoDecoderRenderer, renderTarget, drFlags)) {
+        if (!setupDecoderRenderer(context.videoDecoderRenderer, drFlags)) {
             // Nothing to cleanup here
             throw new IOException(
                     "Video decoder failed to initialize. Your device may not support the selected resolution.");
@@ -258,9 +260,10 @@ public class VideoStream {
                                 break;
                             }
                         } while (ring[ringIndex].getRefCount() != 0);
+                    } catch (ClosedByInterruptException e) {
+                        // Interrupted
                     } catch (IOException e) {
-                        context.connListener.connectionTerminated(e);
-                        return;
+                        throw panic("Failed to receive a video packet", e);
                     }
                 }
             }
@@ -285,14 +288,13 @@ public class VideoStream {
                         pingPacketData.clear();
                         rtp.write(pingPacketData);
                     } catch (IOException e) {
-                        context.connListener.connectionTerminated(e);
-                        return;
+                        throw panic("Failed to send a video ping", e);
                     }
 
                     try {
                         Thread.sleep(500);
                     } catch (InterruptedException e) {
-                        context.connListener.connectionTerminated(e);
+                        // Interrupted
                         return;
                     }
                 }

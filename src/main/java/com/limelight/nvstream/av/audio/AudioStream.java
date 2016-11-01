@@ -1,9 +1,12 @@
 package com.limelight.nvstream.av.audio;
 
+import static kr.motd.gleamstream.Panic.panic;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
@@ -158,7 +161,7 @@ public class AudioStream {
                     try {
                         samples = depacketizer.getNextDecodedData();
                     } catch (InterruptedException e) {
-                        context.connListener.connectionTerminated(e);
+                        // Interrupted
                         return;
                     }
 
@@ -219,9 +222,10 @@ public class AudioStream {
                                 }
                             }
                         }
+                    } catch (ClosedByInterruptException e) {
+                        // Interrupted
                     } catch (IOException e) {
-                        context.connListener.connectionTerminated(e);
-                        return;
+                        throw panic("Failed to receive an audio packet", e);
                     }
                 }
             }
@@ -246,14 +250,13 @@ public class AudioStream {
                         pingPacketData.clear();
                         rtp.write(pingPacketData);
                     } catch (IOException e) {
-                        context.connListener.connectionTerminated(e);
-                        return;
+                        throw panic("Failed to send an audio ping", e);
                     }
 
                     try {
                         Thread.sleep(500);
                     } catch (InterruptedException e) {
-                        context.connListener.connectionTerminated(e);
+                        // Interrupted
                         return;
                     }
                 }

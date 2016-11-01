@@ -13,9 +13,9 @@ Like Moonlight, GleamStream is licensed under
 
 ### Supported platforms
 
-- Linux x86_32 and x86_64
-- Windows x86 and x86_64
+- Linux x86_64
 - MacOS X x86_64
+- Windows x86 and x86_64
 
 ### How to run
 
@@ -31,22 +31,46 @@ Like Moonlight, GleamStream is licensed under
     ./gleamstream
     ```
 
-### Command-line options
+### Usage
 
-- `-host [address]` the address to connect to. This can be a hostname or ip address.
-- `-pair [address]` the address to pair to. This can be a hostname or ip address.
-- `-fs` launch in full screen
-- `-720` use 1280x720 resolution (default)
-- `-1080` use 1920x1080 resolution
-- `-30fps` use 30 fps stream (default)
-- `-60fps` use 60 fps stream
-- `-bitrate [value]` the desired bitrate in Mbps
-- `-app [name]` the application to launch
+```
+Usage: gleamstream [options]
+  Options:
+    -app
+       The name of the application to launch
+       Default: Steam
+    -bitrate
+       The desired bitrate in Mbps
+       Default: 30
+    -connect
+       Connects to the specified IP address or host (e.g. -c 192.168.0.100)
+    -fps
+       The frame rate of the video stream (must be 60 or 30)
+       Default: 60
+    -help, -h
+       Prints the usage
+    -hevc
+       Use HEVC video codec
+    -localaudio
+       Makes the audio stay in the server
+    -pair
+       Pairs with the specified IP address or host (e.g. -p 192.168.0.100)
+    -res
+       The resolution of the video stream (must be 1080 or 720)
+       Default: 1080
+```
 
 For example, I use the following command to start a Steam session:
 
 ```bash
-./gleamstream -host 192.168.0.16 -1080 -60fps -bitrate 30 -app Steam
+./gleamstream -connect 192.168.0.100 -res 1080 -fps 60 -bitrate 30 -app Steam
+```
+
+To pair with the server, enter the following command and type the four-digit
+PIN on your server as instructed:
+
+```bash
+./gleamstream -pair 192.168.0.100
 ```
 
 ### How to build
@@ -57,7 +81,8 @@ cd gleamstream
 ./gradlew build
 ```
 
-The distribution files will be placed at `build/distributions`
+The distribution files will be placed at `build/distributions`. You will find the
+startup script at `bin` directory of the ZIP file or the tarball.
 
 You can also launch the app without building the distributions:
 
