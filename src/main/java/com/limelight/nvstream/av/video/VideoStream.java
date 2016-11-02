@@ -1,7 +1,5 @@
 package com.limelight.nvstream.av.video;
 
-import static kr.motd.gleamstream.Panic.panic;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -19,6 +17,8 @@ import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.DecodeUnit;
 import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
+
+import kr.motd.gleamstream.MainWindow;
 
 public class VideoStream {
 
@@ -262,8 +262,10 @@ public class VideoStream {
                         } while (ring[ringIndex].getRefCount() != 0);
                     } catch (ClosedByInterruptException e) {
                         // Interrupted
+                        MainWindow.INSTANCE.destroy();
                     } catch (IOException e) {
-                        throw panic("Failed to receive a video packet", e);
+                        logger.warn("Failed to receive a video packet", e);
+                        MainWindow.INSTANCE.destroy();
                     }
                 }
             }
@@ -288,13 +290,16 @@ public class VideoStream {
                         pingPacketData.clear();
                         rtp.write(pingPacketData);
                     } catch (IOException e) {
-                        throw panic("Failed to send a video ping", e);
+                        logger.warn("Failed to send a video ping", e);
+                        MainWindow.INSTANCE.destroy();
+                        return;
                     }
 
                     try {
                         Thread.sleep(500);
                     } catch (InterruptedException e) {
                         // Interrupted
+                        MainWindow.INSTANCE.destroy();
                         return;
                     }
                 }

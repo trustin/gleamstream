@@ -31,7 +31,14 @@ Like Moonlight, GleamStream is licensed under
     ./gleamstream
     ```
 
-### Usage
+### GUI usage
+
+Press <kbd>`</kbd> key (backquote) twice within 1 second to toggle the on-screen display
+that shows the recent log messages and FPS.
+
+Press <kbd>ESC</kbd> key when on-screen display is on to quit.
+
+### Command-line usage
 
 ```
 Usage: gleamstream [options]

@@ -18,6 +18,8 @@ import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.enet.EnetConnection;
 import com.limelight.utils.TimeHelper;
 
+import kr.motd.gleamstream.MainWindow;
+
 public class ControlStream implements ConnectionStatusListener, InputPacketSender {
 
     private static final Logger logger = LoggerFactory.getLogger(ControlStream.class);
@@ -322,13 +324,15 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                         lossCountSinceLastReport = 0;
                     } catch (IOException e) {
                         logger.warn("Failed to send loss stats", e);
-                        break;
+                        MainWindow.INSTANCE.destroy();
+                        return;
                     }
 
                     try {
                         Thread.sleep(LOSS_REPORT_INTERVAL_MS);
                     } catch (InterruptedException e) {
                         // Interrupted
+                        MainWindow.INSTANCE.destroy();
                         return;
                     }
                 }

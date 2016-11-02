@@ -1,7 +1,5 @@
 package com.limelight.nvstream.av.audio;
 
-import static kr.motd.gleamstream.Panic.panic;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
@@ -10,12 +8,19 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
 
+import kr.motd.gleamstream.MainWindow;
+
 public class AudioStream {
+    private static final Logger logger = LoggerFactory.getLogger(AudioStream.class);
+
     private static final int RTP_PORT = 48000;
 
     private static final int SAMPLE_RATE = 48000;
@@ -224,8 +229,10 @@ public class AudioStream {
                         }
                     } catch (ClosedByInterruptException e) {
                         // Interrupted
+                        MainWindow.INSTANCE.destroy();
                     } catch (IOException e) {
-                        throw panic("Failed to receive an audio packet", e);
+                        logger.warn("Failed to receive an audio packet", e);
+                        MainWindow.INSTANCE.destroy();
                     }
                 }
             }
@@ -250,13 +257,16 @@ public class AudioStream {
                         pingPacketData.clear();
                         rtp.write(pingPacketData);
                     } catch (IOException e) {
-                        throw panic("Failed to send an audio ping", e);
+                        logger.warn("Failed to send an audio ping", e);
+                        MainWindow.INSTANCE.destroy();
+                        return;
                     }
 
                     try {
                         Thread.sleep(500);
                     } catch (InterruptedException e) {
                         // Interrupted
+                        MainWindow.INSTANCE.destroy();
                         return;
                     }
                 }

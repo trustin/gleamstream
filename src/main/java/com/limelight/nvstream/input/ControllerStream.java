@@ -1,22 +1,18 @@
 package com.limelight.nvstream.input;
 
+import static kr.motd.gleamstream.Panic.panic;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.ShortBufferException;
 import javax.crypto.spec.IvParameterSpec;
@@ -26,6 +22,8 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.control.InputPacketSender;
+
+import kr.motd.gleamstream.MainWindow;
 
 public class ControllerStream {
 
@@ -131,12 +129,7 @@ public class ControllerStream {
                             initialMouseMove.deltaX = partialDeltaX;
                             initialMouseMove.deltaY = partialDeltaY;
 
-                            try {
-                                sendPacket(initialMouseMove);
-                            } catch (IOException e) {
-                                logger.warn("Failed to send a packet:", e);
-                                return;
-                            }
+                            sendPacket(initialMouseMove);
 
                             totalDeltaX -= partialDeltaX;
                             totalDeltaY -= partialDeltaY;
@@ -174,20 +167,10 @@ public class ControllerStream {
                             batchingBlock.reinitializePacket(initialControllerPacket);
                         }
 
-                        try {
-                            sendPacket(packet);
-                        } catch (IOException e) {
-                            logger.warn("Failed to send a packet", e);
-                            return;
-                        }
+                        sendPacket(packet);
                     } else {
                         // Send any other packet as-is
-                        try {
-                            sendPacket(packet);
-                        } catch (IOException e) {
-                            logger.warn("Failed to send a packet", e);
-                            return;
-                        }
+                        sendPacket(packet);
                     }
                 }
             }
@@ -213,7 +196,7 @@ public class ControllerStream {
         }
     }
 
-    private void sendPacket(InputPacket packet) throws IOException {
+    private void sendPacket(InputPacket packet) {
         // Store the packet in wire form in the byte buffer
         packet.toWire(stagingBuffer);
         int packetLen = packet.getPacketLength();
@@ -228,27 +211,31 @@ public class ControllerStream {
             cipher.encrypt(stagingBuffer.array(), packetLen, sendBuffer.array(), 4);
         } catch (Exception e) {
             // Should never happen
-            e.printStackTrace();
-            return;
+            throw panic("Unexpected exception:", e);
         }
 
-        // Send the packet over the control stream on Gen 5+
-        if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
-            controlSender.sendInputPacket(sendBuffer.array(), (short) (paddedLength + 4));
+        try {
+            // Send the packet over the control stream on Gen 5+
+            if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
+                controlSender.sendInputPacket(sendBuffer.array(), (short) (paddedLength + 4));
 
-            // For reasons that I can't understand, NVIDIA decides to use the last 16
-            // bytes of ciphertext in the most recent game controller packet as the IV for
-            // future encryption. I think it may be a buffer overrun on their end but we'll have
-            // to mimic it to work correctly.
-            if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7 && paddedLength >= 32) {
-                cipher.initialize(context.riKey,
-                                  Arrays.copyOfRange(sendBuffer.array(), 4 + paddedLength - 16,
-                                                     4 + paddedLength));
+                // For reasons that I can't understand, NVIDIA decides to use the last 16
+                // bytes of ciphertext in the most recent game controller packet as the IV for
+                // future encryption. I think it may be a buffer overrun on their end but we'll have
+                // to mimic it to work correctly.
+                if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7 && paddedLength >= 32) {
+                    cipher.initialize(context.riKey,
+                                      Arrays.copyOfRange(sendBuffer.array(), 4 + paddedLength - 16,
+                                                         4 + paddedLength));
+                }
+            } else {
+                // Send the packet over the TCP connection on Gen 4 and below
+                out.write(sendBuffer.array(), 0, paddedLength + 4);
+                out.flush();
             }
-        } else {
-            // Send the packet over the TCP connection on Gen 4 and below
-            out.write(sendBuffer.array(), 0, paddedLength + 4);
-            out.flush();
+        } catch (IOException e) {
+            logger.warn("Failed to send a packet:", e);
+            MainWindow.INSTANCE.destroy();
         }
     }
 
@@ -325,14 +312,8 @@ public class ControllerStream {
             try {
                 cipher = Cipher.getInstance("AES/CBC/NoPadding");
                 cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
-            } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace();
-            } catch (NoSuchPaddingException e) {
-                e.printStackTrace();
-            } catch (InvalidKeyException e) {
-                e.printStackTrace();
-            } catch (InvalidAlgorithmParameterException e) {
-                e.printStackTrace();
+            } catch (Exception e) {
+                throw panic("Unexpected exception:", e);
             }
         }
 
@@ -366,7 +347,7 @@ public class ControllerStream {
             try {
                 cipher.update(inputData, 0, encryptedLength, outputData, outputOffset);
             } catch (ShortBufferException e) {
-                e.printStackTrace();
+                throw panic("Unexpected exception:", e);
             }
         }
     }
@@ -402,18 +383,8 @@ public class ControllerStream {
                 byte[] rawCipherOut = cipher.doFinal(inputData, 0, inputLength);
                 System.arraycopy(rawCipherOut, inputLength, outputData, outputOffset, 16);
                 System.arraycopy(rawCipherOut, 0, outputData, outputOffset + 16, inputLength);
-            } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace();
-            } catch (NoSuchPaddingException e) {
-                e.printStackTrace();
-            } catch (InvalidKeyException e) {
-                e.printStackTrace();
-            } catch (InvalidAlgorithmParameterException e) {
-                e.printStackTrace();
-            } catch (IllegalBlockSizeException e) {
-                e.printStackTrace();
-            } catch (BadPaddingException e) {
-                e.printStackTrace();
+            } catch (Exception e) {
+                throw panic("Unexpected exception:", e);
             }
         }
     }

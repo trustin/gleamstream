@@ -6,6 +6,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MAJOR;
 import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MINOR;
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR;
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED;
+import static org.lwjgl.glfw.GLFW.GLFW_CURSOR_NORMAL;
 import static org.lwjgl.glfw.GLFW.GLFW_DECORATED;
 import static org.lwjgl.glfw.GLFW.GLFW_FALSE;
 import static org.lwjgl.glfw.GLFW.GLFW_GREEN_BITS;
@@ -106,9 +107,11 @@ public class MainWindow {
     private NuklearHelper nk;
     private int frameTexture;
     private int frameBuffer;
-    private boolean showOsd;
     private boolean receivedFirstFrame;
     private FFmpegFrame lastFrame;
+
+    private long lastGravePressTime = System.nanoTime();
+    private boolean showOsd;
 
     private long lastFpsCheckTime = System.nanoTime();
     private int droppedFrameCounter;
@@ -140,12 +143,10 @@ public class MainWindow {
     }
 
     private void run() {
-        boolean success = false;
         try {
             init();
             startFuture.complete(null);
             loop();
-            success = true;
         } finally {
             releaseLastFrame();
 
@@ -162,9 +163,9 @@ public class MainWindow {
 
             glfwTerminate();
             glfwSetErrorCallback(null).free();
-
-            System.exit(success ? 0 : 1);
         }
+
+        System.exit(0);
     }
 
     private void init() {
@@ -184,7 +185,7 @@ public class MainWindow {
             throw panic("Failed to get the current video mode");
         }
 
-        // Create a borderless fullscreen window.
+        // Create a borderless full screen window.
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
@@ -268,6 +269,7 @@ public class MainWindow {
             handlePendingTasks();
 
             if (showOsd || !receivedFirstFrame) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 nk.prepare();
                 Osd.INSTANCE.layout(nk, width, height);
                 nk.render();
@@ -357,13 +359,19 @@ public class MainWindow {
     }
 
     private void onKey(long window, int key, int scancode, int action, int mods) {
-        if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) {
+        if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE && showOsd) {
             glfwSetWindowShouldClose(window, true);
             return;
         }
+
         if (key == GLFW_KEY_GRAVE_ACCENT && action == GLFW_RELEASE) {
-            showOsd = !showOsd;
-            return;
+            // Toggle the OSD if the grave (backquote) key was pressed twice within one second.
+            final long currentTime = System.nanoTime();
+            if (currentTime - lastGravePressTime < 1000000000L) {
+                showOsd = !showOsd;
+                return;
+            }
+            lastGravePressTime = currentTime;
         }
 
         if (showOsd) {

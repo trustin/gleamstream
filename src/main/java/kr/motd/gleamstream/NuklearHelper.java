@@ -13,7 +13,6 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_E;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_END;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_HOME;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL;
@@ -40,7 +39,6 @@ import static org.lwjgl.glfw.GLFW.glfwPollEvents;
 import static org.lwjgl.glfw.GLFW.glfwSetClipboardString;
 import static org.lwjgl.glfw.GLFW.glfwSetCursorPos;
 import static org.lwjgl.glfw.GLFW.glfwSetInputMode;
-import static org.lwjgl.glfw.GLFW.glfwSetWindowShouldClose;
 import static org.lwjgl.glfw.GLFW.nglfwGetClipboardString;
 import static org.lwjgl.nuklear.Nuklear.NK_ANTI_ALIASING_ON;
 import static org.lwjgl.nuklear.Nuklear.NK_BUTTON_LEFT;
@@ -552,9 +550,6 @@ public final class NuklearHelper {
     public void onKey(long window, int key, int scancode, int action, int mods) {
         boolean press = action == GLFW_PRESS;
         switch (key) {
-            case GLFW_KEY_ESCAPE:
-                glfwSetWindowShouldClose(window, true);
-                break;
             case GLFW_KEY_DELETE:
                 nk_input_key(ctx, NK_KEY_DEL, press);
                 break;

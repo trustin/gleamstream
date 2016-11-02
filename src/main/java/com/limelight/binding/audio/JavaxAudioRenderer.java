@@ -29,7 +29,7 @@ public class JavaxAudioRenderer implements AudioRenderer {
     private int sampleRate;
     private boolean reallocateLines;
 
-    public static final int STARING_BUFFER_SIZE = 6144;
+    public static final int STARING_BUFFER_SIZE = 8192;
     public static final int STAGING_BUFFERS = 3; // 3 complete frames of audio
 
     /**

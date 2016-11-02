@@ -331,7 +331,6 @@ public class NvConnection {
                         break;
                 }
             } catch (Exception e) {
-                success = false;
                 throw panic("Unexpected exception:", e);
             }
 
