@@ -24,11 +24,18 @@ Like Moonlight, GleamStream is licensed under
 - On your streaming client machine:  
   - Download [Java 8](http://java.oracle.com/) and install it.
   - Download the ZIP or tarball distribution of GleamStream at [GitHub releases](https://github.com/trustin/gleamstream/releases)
-  - Unzip or untar the distribution you downloaded and run the launch script:
+  - Unzip or untar the distribution you downloaded.
+  - Pair with the streaming server:
 
     ```bash
     cd gleamstream-X.Y.Z/bin
-    ./gleamstream
+    ./gleamstream -pair <IP address or hostname of the server>
+    ```
+  - Connect to the streaming server:
+  
+    ```bash
+    cd gleamstream-X.Y.Z/bin
+    ./gleamstream -connect <IP address or hostname of the server>
     ```
 
 ### GUI usage
