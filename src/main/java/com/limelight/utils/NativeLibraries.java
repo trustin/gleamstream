@@ -18,10 +18,10 @@ public final class NativeLibraries {
 
     private static final Logger logger = LoggerFactory.getLogger(NativeLibraries.class);
 
-    private static final DefaultDetector detector = new DefaultDetector();
+    private static final String OS_CLASSIFIER = new DefaultDetector().detect();
 
     public static void load(String name) {
-        final String resourcePath = '/' + detector.detect() + '/' + System.mapLibraryName(name);
+        final String resourcePath = '/' + OS_CLASSIFIER + '/' + System.mapLibraryName(name);
         final InputStream in = NativeLibraries.class.getResourceAsStream(resourcePath);
         if (in == null) {
             throw new IllegalStateException("cannot find a native library: " + resourcePath);
