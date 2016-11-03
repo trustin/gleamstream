@@ -318,6 +318,8 @@ public class MainWindow {
         final long renderStartTime = System.nanoTime();
         final int sourceWidth = e.width();
         final int sourceHeight = e.height();
+        final int zoomedX;
+        final int zoomedY;
         final int zoomedWidth;
         final int zoomedHeight;
         if (sourceHeight * fbWidth > fbHeight * sourceWidth) {
@@ -327,6 +329,8 @@ public class MainWindow {
             zoomedWidth = fbWidth;
             zoomedHeight = sourceHeight * fbWidth / sourceWidth;
         }
+        zoomedX = fbWidth - zoomedWidth >>> 1;
+        zoomedY = fbHeight - zoomedHeight >>> 1;
 
         glBindTexture(GL_TEXTURE_2D, frameTexture);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer);
@@ -334,8 +338,8 @@ public class MainWindow {
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sourceWidth, sourceHeight,
                         GL_BGRA, GL_UNSIGNED_BYTE, e.dataAddress());
         glBlitFramebuffer(0, sourceHeight, sourceWidth, 0,
-                          fbWidth - zoomedWidth >>> 1, fbHeight - zoomedHeight >>> 1,
-                          zoomedWidth, zoomedHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                          zoomedX, zoomedY,
+                          zoomedWidth + zoomedX, zoomedHeight + zoomedY, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
 
