@@ -33,7 +33,7 @@ public final class Main {
 
     static {
         Thread.setDefaultUncaughtExceptionHandler((thread, cause) -> {
-            throw panic("Unexpected exception from " + thread.getName() + ':', cause);
+            throw panic(cause);
         });
     }
 

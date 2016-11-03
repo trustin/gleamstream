@@ -67,7 +67,7 @@ public class NvConnection {
             context.riKey = generateRiAesKey();
         } catch (NoSuchAlgorithmException e) {
             // Should never happen
-            throw panic("Unexpected exception", e);
+            throw panic(e);
         }
 
         context.riKeyId = generateRiKeyId();
@@ -350,7 +350,7 @@ public class NvConnection {
                         break;
                 }
             } catch (Exception e) {
-                throw panic("Unexpected exception:", e);
+                throw panic(e);
             }
 
             if (success) {

@@ -215,7 +215,7 @@ public class ControllerStream {
             cipher.encrypt(stagingBuffer.array(), packetLen, sendBuffer.array(), 4);
         } catch (Exception e) {
             // Should never happen
-            throw panic("Unexpected exception:", e);
+            throw panic(e);
         }
 
         // Send the packet over the control stream on Gen 5+
@@ -312,7 +312,7 @@ public class ControllerStream {
                 cipher = Cipher.getInstance("AES/CBC/NoPadding");
                 cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
             } catch (Exception e) {
-                throw panic("Unexpected exception:", e);
+                throw panic(e);
             }
         }
 
@@ -346,7 +346,7 @@ public class ControllerStream {
             try {
                 cipher.update(inputData, 0, encryptedLength, outputData, outputOffset);
             } catch (ShortBufferException e) {
-                throw panic("Unexpected exception:", e);
+                throw panic(e);
             }
         }
     }
@@ -383,7 +383,7 @@ public class ControllerStream {
                 System.arraycopy(rawCipherOut, inputLength, outputData, outputOffset, 16);
                 System.arraycopy(rawCipherOut, 0, outputData, outputOffset + 16, inputLength);
             } catch (Exception e) {
-                throw panic("Unexpected exception:", e);
+                throw panic(e);
             }
         }
     }

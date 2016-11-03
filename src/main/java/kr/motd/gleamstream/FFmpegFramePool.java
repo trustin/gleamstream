@@ -71,7 +71,7 @@ final class FFmpegFramePool {
         }
 
         void release() {
-            FFmpegFramePool.this.pool.add(this);
+            pool.add(this);
         }
     }
 }

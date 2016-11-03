@@ -10,8 +10,8 @@ public class AtomicPopulatedBufferList<T> extends AbstractPopulatedBufferList<T>
     public AtomicPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
         super(maxQueueSize, factory);
 
-        this.populatedList = new ArrayBlockingQueue<T>(maxQueueSize, false);
-        this.freeList = new ArrayBlockingQueue<T>(maxQueueSize, false);
+        populatedList = new ArrayBlockingQueue<>(maxQueueSize, false);
+        freeList = new ArrayBlockingQueue<>(maxQueueSize, false);
 
         for (int i = 0; i < maxQueueSize; i++) {
             freeList.add((T) factory.createFreeBuffer());

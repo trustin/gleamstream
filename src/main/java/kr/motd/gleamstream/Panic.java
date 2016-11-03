@@ -36,6 +36,10 @@ public final class Panic {
         };
     }
 
+    public static RuntimeException panic(Throwable cause) {
+        return panic("Unexpected exception from " + Thread.currentThread().getName() + ':', cause);
+    }
+
     public static RuntimeException panic(String message) {
         return panic(message, new IllegalStateException("panic!"));
     }
