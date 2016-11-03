@@ -101,7 +101,7 @@ startup script at `bin` directory of the ZIP file or the tarball.
 You can also launch the app without building the distributions:
 
 ```bash
-./gradlew run
+./gradlew run -PappArgs='-connect 192.168.0.100'
 ```
 
 ### Authors (GleamStream)
