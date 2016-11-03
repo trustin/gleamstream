@@ -21,9 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
+import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.control.InputPacketSender;
-
-import kr.motd.gleamstream.MainWindow;
 
 public class ControllerStream {
 
@@ -33,6 +32,7 @@ public class ControllerStream {
 
     private static final int CONTROLLER_TIMEOUT = 10000;
 
+    private final NvConnection parent;
     private final ConnectionContext context;
 
     // Only used on Gen 4 or below servers
@@ -50,7 +50,8 @@ public class ControllerStream {
     private final ByteBuffer stagingBuffer = ByteBuffer.allocate(128);
     private final ByteBuffer sendBuffer = ByteBuffer.allocate(128).order(ByteOrder.BIG_ENDIAN);
 
-    public ControllerStream(ConnectionContext context) {
+    public ControllerStream(NvConnection parent, ConnectionContext context) {
+        this.parent = parent;
         this.context = context;
 
         if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7) {
@@ -80,18 +81,10 @@ public class ControllerStream {
     }
 
     public void start() {
-        inputThread = new Thread() {
-            @Override
-            public void run() {
-                while (!isInterrupted()) {
-                    InputPacket packet;
-
-                    try {
-                        packet = inputQueue.take();
-                    } catch (InterruptedException e) {
-                        // Interrupted
-                        return;
-                    }
+        inputThread = new Thread(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    final InputPacket packet = inputQueue.take();
 
                     // Try to batch mouse move packets
                     if (!inputQueue.isEmpty() && packet instanceof MouseMovePacket) {
@@ -148,10 +141,12 @@ public class ControllerStream {
                                 if (queuedPacket instanceof MultiControllerPacket) {
                                     // Only initialize the batching block if we got here
                                     if (batchingBlock == null) {
-                                        batchingBlock = new ControllerBatchingBlock(initialControllerPacket);
+                                        batchingBlock = new ControllerBatchingBlock(
+                                                initialControllerPacket);
                                     }
 
-                                    if (batchingBlock.submitNewPacket((MultiControllerPacket) queuedPacket)) {
+                                    if (batchingBlock.submitNewPacket(
+                                            (MultiControllerPacket) queuedPacket)) {
                                         // Batching was successful, so remove this packet
                                         i.remove();
                                     } else {
@@ -173,30 +168,39 @@ public class ControllerStream {
                         sendPacket(packet);
                     }
                 }
+            } catch (InterruptedException e) {
+                // Interrupted
+            } catch (IOException e) {
+                logger.warn("Failed to send a packet:", e);
+            } finally {
+                parent.stop();
             }
-        };
+        });
         inputThread.setName("Input - Queue");
         inputThread.setPriority(Thread.NORM_PRIORITY + 1);
         inputThread.start();
     }
 
     public void abort() {
-        if (inputThread != null) {
-            inputThread.interrupt();
-
-            try {
-                inputThread.join();
-            } catch (InterruptedException e) {}
-        }
-
         if (s != null) {
             try {
                 s.close();
-            } catch (IOException e) {}
+            } catch (IOException e) {
+                logger.warn("Failed to close a Socket", e);
+            }
+        }
+
+        if (inputThread != null) {
+            while (inputThread.isAlive()) {
+                inputThread.interrupt();
+                try {
+                    inputThread.join();
+                } catch (InterruptedException ignored) {}
+            }
         }
     }
 
-    private void sendPacket(InputPacket packet) {
+    private void sendPacket(InputPacket packet) throws IOException {
         // Store the packet in wire form in the byte buffer
         packet.toWire(stagingBuffer);
         int packetLen = packet.getPacketLength();
@@ -214,28 +218,23 @@ public class ControllerStream {
             throw panic("Unexpected exception:", e);
         }
 
-        try {
-            // Send the packet over the control stream on Gen 5+
-            if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
-                controlSender.sendInputPacket(sendBuffer.array(), (short) (paddedLength + 4));
+        // Send the packet over the control stream on Gen 5+
+        if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
+            controlSender.sendInputPacket(sendBuffer.array(), (short) (paddedLength + 4));
 
-                // For reasons that I can't understand, NVIDIA decides to use the last 16
-                // bytes of ciphertext in the most recent game controller packet as the IV for
-                // future encryption. I think it may be a buffer overrun on their end but we'll have
-                // to mimic it to work correctly.
-                if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7 && paddedLength >= 32) {
-                    cipher.initialize(context.riKey,
-                                      Arrays.copyOfRange(sendBuffer.array(), 4 + paddedLength - 16,
-                                                         4 + paddedLength));
-                }
-            } else {
-                // Send the packet over the TCP connection on Gen 4 and below
-                out.write(sendBuffer.array(), 0, paddedLength + 4);
-                out.flush();
+            // For reasons that I can't understand, NVIDIA decides to use the last 16
+            // bytes of ciphertext in the most recent game controller packet as the IV for
+            // future encryption. I think it may be a buffer overrun on their end but we'll have
+            // to mimic it to work correctly.
+            if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7 && paddedLength >= 32) {
+                cipher.initialize(context.riKey,
+                                  Arrays.copyOfRange(sendBuffer.array(), 4 + paddedLength - 16,
+                                                     4 + paddedLength));
             }
-        } catch (IOException e) {
-            logger.warn("Failed to send a packet:", e);
-            MainWindow.INSTANCE.destroy();
+        } else {
+            // Send the packet over the TCP connection on Gen 4 and below
+            out.write(sendBuffer.array(), 0, paddedLength + 4);
+            out.flush();
         }
     }
 

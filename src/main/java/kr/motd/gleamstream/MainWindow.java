@@ -84,6 +84,7 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import java.nio.IntBuffer;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 import org.jctools.queues.MpscArrayQueue;
 import org.jctools.queues.SpscArrayQueue;
@@ -92,10 +93,19 @@ import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.Platform;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.limelight.input.gamepad.GamepadHandler;
+import com.limelight.input.gamepad.GamepadListener;
+import com.limelight.input.gamepad.NativeGamepad;
+import com.limelight.nvstream.NvConnection;
 
 import kr.motd.gleamstream.FFmpegFramePool.FFmpegFrame;
 
 public class MainWindow {
+
+    private static final Logger logger = LoggerFactory.getLogger(MainWindow.class);
 
     public static final MainWindow INSTANCE = new MainWindow();
 
@@ -118,12 +128,22 @@ public class MainWindow {
     private int frameCounter;
     private long renderTimeCounter;
 
+    private volatile NvConnection nvConn;
     private volatile MainWindowListener listener;
 
     private MainWindow() {}
 
     public void addFrame(FFmpegFrame frame) {
         pendingFrames.add(frame);
+    }
+
+    public void setNvConnection(NvConnection nvConn) {
+        this.nvConn = nvConn;
+
+        // TODO: Replace with GLFW's Joystick API.
+        final GamepadHandler gamepad = new GamepadHandler(nvConn);
+        GamepadListener.addDeviceListener(gamepad);
+        NativeGamepad.start();
     }
 
     public void setListener(MainWindowListener listener) {
@@ -148,6 +168,19 @@ public class MainWindow {
             startFuture.complete(null);
             loop();
         } finally {
+            NativeGamepad.stop();
+
+            final Future<?> stopFuture;
+            if (nvConn != null) {
+                stopFuture = nvConn.stop();
+            } else {
+                stopFuture = CompletableFuture.completedFuture(null);
+            }
+
+            if (!startFuture.isDone()) {
+                startFuture.completeExceptionally(new IllegalStateException("Main window did not start"));
+            }
+
             releaseLastFrame();
 
             if (nk != null) {
@@ -163,9 +196,13 @@ public class MainWindow {
 
             glfwTerminate();
             glfwSetErrorCallback(null).free();
-        }
 
-        System.exit(0);
+            try {
+                stopFuture.get();
+            } catch (Exception e) {
+                logger.warn("Failed to stop an NvConnection", e);
+            }
+        }
     }
 
     private void init() {
@@ -247,7 +284,7 @@ public class MainWindow {
     }
 
     private void loop() {
-        while (!glfwWindowShouldClose(window)) {
+        while (!glfwWindowShouldClose(window) && (nvConn == null || !nvConn.isStopped())) {
             // Get the width and height of the frame buffer.
             int width;
             int height;

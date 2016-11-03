@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedByInterruptException;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
@@ -12,11 +12,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
+import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
-
-import kr.motd.gleamstream.MainWindow;
+import com.limelight.nvstream.av.RtpReorderQueue.RtpQueueStatus;
 
 public class AudioStream {
     private static final Logger logger = LoggerFactory.getLogger(AudioStream.class);
@@ -35,12 +35,14 @@ public class AudioStream {
 
     private final LinkedList<Thread> threads = new LinkedList<>();
 
-    private boolean aborting;
+    private volatile boolean aborting;
 
+    private final NvConnection parent;
     private final ConnectionContext context;
     private final AudioRenderer streamListener;
 
-    public AudioStream(ConnectionContext context, AudioRenderer streamListener) {
+    public AudioStream(NvConnection parent, ConnectionContext context, AudioRenderer streamListener) {
+        this.parent = parent;
         this.context = context;
         this.streamListener = streamListener;
     }
@@ -52,24 +54,23 @@ public class AudioStream {
 
         aborting = true;
 
-        for (Thread t : threads) {
-            t.interrupt();
-        }
-
         // Close the socket to interrupt the receive thread
         if (rtp != null) {
             try {
                 rtp.close();
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.warn("Failed to close a RTP connection", e);
             }
         }
 
         // Wait for threads to terminate
         for (Thread t : threads) {
-            try {
-                t.join();
-            } catch (InterruptedException e) { }
+            while (t.isAlive()) {
+                t.interrupt();
+                try {
+                    t.join();
+                } catch (InterruptedException ignored) {}
+            }
         }
 
         streamListener.streamClosing();
@@ -156,25 +157,19 @@ public class AudioStream {
 
     private void startDecoderThread() {
         // Decoder thread
-        Thread t = new Thread() {
-            @Override
-            public void run() {
-
-                while (!isInterrupted()) {
-                    ByteBufferDescriptor samples;
-
-                    try {
-                        samples = depacketizer.getNextDecodedData();
-                    } catch (InterruptedException e) {
-                        // Interrupted
-                        return;
-                    }
-
+        Thread t = new Thread(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    ByteBufferDescriptor samples = depacketizer.getNextDecodedData();
                     streamListener.playDecodedAudio(samples.data, samples.offset, samples.length);
                     depacketizer.freeDecodedData(samples);
                 }
+            } catch (InterruptedException e) {
+                // Interrupted
+            } finally {
+                parent.stop();
             }
-        };
+        });
         threads.add(t);
         t.setName("Audio - Player");
         t.setPriority(Thread.NORM_PRIORITY + 2);
@@ -183,60 +178,56 @@ public class AudioStream {
 
     private void startReceiveThread() {
         // Receive thread
-        Thread t = new Thread() {
-            @Override
-            public void run() {
-                byte[] buffer = new byte[MAX_PACKET_SIZE];
-                ByteBuffer packet = ByteBuffer.wrap(buffer);
-                RtpPacket queuedPacket, rtpPacket = new RtpPacket(buffer);
-                RtpReorderQueue rtpQueue = new RtpReorderQueue();
-                RtpReorderQueue.RtpQueueStatus queueStatus;
+        Thread t = new Thread(() -> {
+            byte[] buffer = new byte[MAX_PACKET_SIZE];
+            ByteBuffer packet = ByteBuffer.wrap(buffer);
+            RtpPacket queuedPacket, rtpPacket = new RtpPacket(buffer);
+            RtpReorderQueue rtpQueue = new RtpReorderQueue();
+            RtpQueueStatus queueStatus;
 
-                while (!isInterrupted()) {
-                    try {
-                        packet.clear();
-                        rtp.read(packet);
-                        packet.flip();
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    packet.clear();
+                    rtp.read(packet);
+                    packet.flip();
 
-                        // DecodeInputData() doesn't hold onto the buffer so we are free to reuse it
-                        rtpPacket.initializeWithLength(packet.remaining());
+                    // DecodeInputData() doesn't hold onto the buffer so we are free to reuse it
+                    rtpPacket.initializeWithLength(packet.remaining());
 
-                        // Throw away non-audio packets before queuing
-                        if (rtpPacket.getPacketType() != 97) {
-                            // Only type 97 is audio
-                            continue;
+                    // Throw away non-audio packets before queuing
+                    if (rtpPacket.getPacketType() != 97) {
+                        // Only type 97 is audio
+                        continue;
+                    }
+
+                    queueStatus = rtpQueue.addPacket(rtpPacket);
+                    if (queueStatus == RtpQueueStatus.HANDLE_IMMEDIATELY) {
+                        // Send directly to the depacketizer
+                        depacketizer.decodeInputData(rtpPacket);
+                    } else {
+                        if (queueStatus != RtpQueueStatus.REJECTED) {
+                            // The queue consumed our packet, so we must allocate a new one
+                            buffer = new byte[MAX_PACKET_SIZE];
+                            packet = ByteBuffer.wrap(buffer);
+                            rtpPacket = new RtpPacket(buffer);
                         }
 
-                        queueStatus = rtpQueue.addPacket(rtpPacket);
-                        if (queueStatus == RtpReorderQueue.RtpQueueStatus.HANDLE_IMMEDIATELY) {
-                            // Send directly to the depacketizer
-                            depacketizer.decodeInputData(rtpPacket);
-                        } else {
-                            if (queueStatus != RtpReorderQueue.RtpQueueStatus.REJECTED) {
-                                // The queue consumed our packet, so we must allocate a new one
-                                buffer = new byte[MAX_PACKET_SIZE];
-                                packet = ByteBuffer.wrap(buffer);
-                                rtpPacket = new RtpPacket(buffer);
-                            }
-
-                            // If packets are ready, pull them and send them to the depacketizer
-                            if (queueStatus == RtpReorderQueue.RtpQueueStatus.QUEUED_PACKETS_READY) {
-                                while ((queuedPacket = (RtpPacket) rtpQueue.getQueuedPacket()) != null) {
-                                    depacketizer.decodeInputData(queuedPacket);
-                                    queuedPacket.dereferencePacket();
-                                }
+                        // If packets are ready, pull them and send them to the depacketizer
+                        if (queueStatus == RtpQueueStatus.QUEUED_PACKETS_READY) {
+                            while ((queuedPacket = (RtpPacket) rtpQueue.getQueuedPacket()) != null) {
+                                depacketizer.decodeInputData(queuedPacket);
+                                queuedPacket.dereferencePacket();
                             }
                         }
-                    } catch (ClosedByInterruptException e) {
-                        // Interrupted
-                        MainWindow.INSTANCE.destroy();
-                    } catch (IOException e) {
-                        logger.warn("Failed to receive an audio packet", e);
-                        MainWindow.INSTANCE.destroy();
                     }
                 }
+            } catch (ClosedChannelException ignored) {
+            } catch (IOException e) {
+                logger.warn("Failed to receive an audio packet", e);
+            } finally {
+                parent.stop();
             }
-        };
+        });
         threads.add(t);
         t.setName("Audio - Receive");
         t.setPriority(Thread.NORM_PRIORITY + 1);
@@ -245,33 +236,25 @@ public class AudioStream {
 
     private void startUdpPingThread() {
         // Ping thread
-        Thread t = new Thread() {
-            @Override
-            public void run() {
-                // PING in ASCII
-                final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
+        Thread t = new Thread(() -> {
+            // PING in ASCII
+            final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
 
-                // Send PING every 500 ms
-                while (!isInterrupted()) {
-                    try {
-                        pingPacketData.clear();
-                        rtp.write(pingPacketData);
-                    } catch (IOException e) {
-                        logger.warn("Failed to send an audio ping", e);
-                        MainWindow.INSTANCE.destroy();
-                        return;
-                    }
-
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                        // Interrupted
-                        MainWindow.INSTANCE.destroy();
-                        return;
-                    }
+            // Send PING every 500 ms
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    pingPacketData.clear();
+                    rtp.write(pingPacketData);
+                    Thread.sleep(500);
                 }
+            } catch (IOException e) {
+                logger.warn("Failed to send an audio ping", e);
+            } catch (InterruptedException e) {
+                // Interrupted
+            } finally {
+                parent.stop();
             }
-        };
+        });
         threads.add(t);
         t.setPriority(Thread.MIN_PRIORITY);
         t.setName("Audio - Ping");

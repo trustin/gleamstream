@@ -13,12 +13,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
+import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.enet.EnetConnection;
 import com.limelight.utils.TimeHelper;
-
-import kr.motd.gleamstream.MainWindow;
 
 public class ControlStream implements ConnectionStatusListener, InputPacketSender {
 
@@ -141,6 +140,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private int lastSeenFrame;
     private int lossCountSinceLastReport;
 
+    private final NvConnection parent;
     private final ConnectionContext context;
 
     // If we drop at least 10 frames in 15 second (or less) window
@@ -170,14 +170,15 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private Thread lossStatsThread;
     private Thread resyncThread;
     private final LinkedBlockingQueue<int[]> invalidReferenceFrameTuples = new LinkedBlockingQueue<>();
-    private boolean aborting;
+    private volatile boolean aborting;
     private boolean forceIdrRequest;
 
     private final short[] packetTypes;
     private final short[] payloadLengths;
     private final byte[][] preconstructedPayloads;
 
-    public ControlStream(ConnectionContext context) {
+    public ControlStream(NvConnection parent, ConnectionContext context) {
+        this.parent = parent;
         this.context = context;
 
         switch (context.serverGeneration) {
@@ -272,29 +273,35 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         if (s != null) {
             try {
                 s.close();
-            } catch (IOException e) {}
+            } catch (IOException e) {
+                logger.warn("Failed to close the control stream", e);
+            }
         }
 
         if (lossStatsThread != null) {
-            lossStatsThread.interrupt();
-
-            try {
-                lossStatsThread.join();
-            } catch (InterruptedException e) {}
+            while (lossStatsThread.isAlive()) {
+                lossStatsThread.interrupt();
+                try {
+                    lossStatsThread.join();
+                } catch (InterruptedException ignored) {}
+            }
         }
 
         if (resyncThread != null) {
-            resyncThread.interrupt();
-
-            try {
-                resyncThread.join();
-            } catch (InterruptedException e) {}
+            while (resyncThread.isAlive()) {
+                resyncThread.interrupt();
+                try {
+                    resyncThread.join();
+                } catch (InterruptedException ignored) {}
+            }
         }
 
         if (enetConnection != null) {
             try {
                 enetConnection.close();
-            } catch (IOException e) {}
+            } catch (IOException e) {
+                logger.warn("Failed to close the control stream", e);
+            }
         }
     }
 
@@ -312,56 +319,40 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             s.setSoTimeout(0);
         }
 
-        lossStatsThread = new Thread() {
-            @Override
-            public void run() {
-                ByteBuffer bb = ByteBuffer.allocate(payloadLengths[IDX_LOSS_STATS]).order(
-                        ByteOrder.LITTLE_ENDIAN);
+        lossStatsThread = new Thread(() -> {
+            ByteBuffer bb = ByteBuffer.allocate(payloadLengths[IDX_LOSS_STATS]).order(ByteOrder.LITTLE_ENDIAN);
 
-                while (!isInterrupted()) {
-                    try {
-                        sendLossStats(bb);
-                        lossCountSinceLastReport = 0;
-                    } catch (IOException e) {
-                        logger.warn("Failed to send loss stats", e);
-                        MainWindow.INSTANCE.destroy();
-                        return;
-                    }
-
-                    try {
-                        Thread.sleep(LOSS_REPORT_INTERVAL_MS);
-                    } catch (InterruptedException e) {
-                        // Interrupted
-                        MainWindow.INSTANCE.destroy();
-                        return;
-                    }
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    sendLossStats(bb);
+                    lossCountSinceLastReport = 0;
+                    Thread.sleep(LOSS_REPORT_INTERVAL_MS);
                 }
+            } catch (IOException e) {
+                logger.warn("Failed to send loss stats", e);
+            } catch (InterruptedException e) {
+                // Interrupted
+            } finally {
+                parent.stop();
             }
-        };
+        });
         lossStatsThread.setPriority(Thread.MIN_PRIORITY + 1);
         lossStatsThread.setName("Control - Loss Stats Thread");
         lossStatsThread.start();
 
-        resyncThread = new Thread() {
-            @Override
-            public void run() {
-                while (!isInterrupted()) {
-                    int[] tuple;
+        resyncThread = new Thread(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
                     boolean idrFrameRequired = false;
 
                     // Wait for a tuple
-                    try {
-                        tuple = invalidReferenceFrameTuples.take();
-                    } catch (InterruptedException e) {
-                        // Interrupted
-                        return;
-                    }
+                    int[] tuple = invalidReferenceFrameTuples.take();
 
                     // Check for the magic IDR frame tuple
                     int[] lastTuple = null;
                     if (tuple[0] != 0 || tuple[1] != 0) {
                         // Aggregate all lost frames into one range
-                        for (;;) {
+                        for (; ; ) {
                             int[] nextTuple = lastTuple = invalidReferenceFrameTuples.poll();
                             if (nextTuple == null) {
                                 break;
@@ -381,23 +372,25 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                         idrFrameRequired = true;
                     }
 
-                    try {
-                        if (forceIdrRequest || idrFrameRequired) {
-                            requestIdrFrame();
-                        } else {
-                            // Update the end of the range to the latest tuple
-                            if (lastTuple != null) {
-                                tuple[1] = lastTuple[1];
-                            }
-
-                            invalidateReferenceFrames(tuple[0], tuple[1]);
+                    if (forceIdrRequest || idrFrameRequired) {
+                        requestIdrFrame();
+                    } else {
+                        // Update the end of the range to the latest tuple
+                        if (lastTuple != null) {
+                            tuple[1] = lastTuple[1];
                         }
-                    } catch (IOException e) {
-                        logger.warn("Failed to request an IDR frame", e);
+
+                        invalidateReferenceFrames(tuple[0], tuple[1]);
                     }
                 }
+            } catch (InterruptedException e) {
+                // Interrupted
+            } catch (IOException e) {
+                logger.warn("Failed to request an IDR frame", e);
+            } finally {
+                parent.stop();
             }
-        };
+        });
         resyncThread.setName("Control - Resync Thread");
         resyncThread.setPriority(Thread.MAX_PRIORITY - 1);
         resyncThread.start();

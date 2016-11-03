@@ -66,9 +66,9 @@ final class FFmpegVideoDecoderRenderer extends VideoDecoderRenderer {
     private int totalFrames;
     private long totalDecoderTimeMs;
 
-    FFmpegVideoDecoderRenderer(MainWindow mainWindow, FFmpegFramePool framePool) {
+    FFmpegVideoDecoderRenderer(MainWindow mainWindow, int width, int height) {
         this.mainWindow = mainWindow;
-        this.framePool = framePool;
+        framePool = new FFmpegFramePool(width, height);
     }
 
     /**
@@ -133,8 +133,9 @@ final class FFmpegVideoDecoderRenderer extends VideoDecoderRenderer {
             while (!dying) {
                 try {
                     du = depacketizer.takeNextDecodeUnit();
-                } catch (InterruptedException e1) {
-                    return;
+                } catch (InterruptedException e) {
+                    // Interrupted
+                    break;
                 }
 
                 if (du != null) {
@@ -157,11 +158,11 @@ final class FFmpegVideoDecoderRenderer extends VideoDecoderRenderer {
     public void stop() {
         dying = true;
         if (decoderThread != null) {
-            decoderThread.interrupt();
-
-            try {
-                decoderThread.join();
-            } catch (InterruptedException e) {
+            while (decoderThread.isAlive()) {
+                decoderThread.interrupt();
+                try {
+                    decoderThread.join();
+                } catch (InterruptedException ignored) {}
             }
         }
     }

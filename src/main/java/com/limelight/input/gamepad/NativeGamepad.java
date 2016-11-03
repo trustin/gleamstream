@@ -86,56 +86,55 @@ public final class NativeGamepad {
     }
 
     private static void startPolling() {
-        pollingThread = new Thread() {
-            @Override
-            public void run() {
-                int iterations = 0;
+        pollingThread = new Thread(() -> {
+            int iterations = 0;
 
-                if (!initialized) {
-                    NativeGamepad.init();
-                    initialized = true;
-                }
+            if (!initialized) {
+                init();
+                initialized = true;
+            }
 
-                while (!isInterrupted()) {
-                    // If we have no devices, we don't bother with the event
-                    // polling interval. We just run the device polling interval.
+            while (!Thread.currentThread().isInterrupted()) {
+                // If we have no devices, we don't bother with the event
+                // polling interval. We just run the device polling interval.
+                if (getDeviceCount() == 0) {
+                    detectDevices();
+                    processEvents();
                     if (getDeviceCount() == 0) {
-                        detectDevices();
-                        processEvents();
-                        if (getDeviceCount() == 0) {
-                            try {
-                                Thread.sleep(pollingIntervalMs * devicePollingIterations);
-                            } catch (InterruptedException e) {
-                                return;
-                            }
-                        }
-                    } else {
-                        if (iterations++ % devicePollingIterations == 0) {
-                            detectDevices();
-                        }
-
-                        processEvents();
-
                         try {
-                            Thread.sleep(pollingIntervalMs);
-                        } catch (InterruptedException e) {
-                            return;
+                            Thread.sleep(pollingIntervalMs * devicePollingIterations);
+                        } catch (InterruptedException ignored) {
+                            break;
                         }
+                    }
+                } else {
+                    if (iterations++ % devicePollingIterations == 0) {
+                        detectDevices();
+                    }
+
+                    processEvents();
+
+                    try {
+                        Thread.sleep(pollingIntervalMs);
+                    } catch (InterruptedException ignored) {
+                        break;
                     }
                 }
             }
-        };
+        });
         pollingThread.setName("Native Gamepad - Polling Thread");
         pollingThread.start();
     }
 
     private static void stopPolling() {
         if (pollingThread != null) {
-            pollingThread.interrupt();
+            while (pollingThread.isAlive()) {
+                pollingThread.interrupt();
 
-            try {
-                pollingThread.join();
-            } catch (InterruptedException e) {}
+                try {
+                    pollingThread.join();
+                } catch (InterruptedException ignored) {}
+            }
         }
     }
 

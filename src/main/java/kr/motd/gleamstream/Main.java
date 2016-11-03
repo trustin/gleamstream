@@ -16,7 +16,6 @@ import com.limelight.binding.audio.JavaxAudioRenderer;
 import com.limelight.binding.crypto.PcCryptoProvider;
 import com.limelight.input.gamepad.GamepadHandler;
 import com.limelight.input.gamepad.GamepadListener;
-import com.limelight.input.gamepad.NativeGamepad;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
@@ -138,7 +137,6 @@ public final class Main {
         Osd.INSTANCE.setProgress("Initializing");
         MainWindow.INSTANCE.start().join();
 
-        NativeGamepad.start();
         StreamConfiguration streamConfig = createConfiguration(
                 width, height, useLocalAudio, Boolean.TRUE.equals(useHevc));
 
@@ -192,20 +190,14 @@ public final class Main {
                 connectHost, prefs.getUniqueId(), connListener, streamConfig,
                 new PcCryptoProvider());
 
-        // TODO: Replace with GLFW's Joystick API.
-        final GamepadHandler gamepad = new GamepadHandler(conn);
-        GamepadListener.addDeviceListener(gamepad);
+        addShutdownHook(conn);
 
-        conn.start(
-                VideoDecoderRenderer.FLAG_PREFER_QUALITY,
-                new JavaxAudioRenderer(), // TODO: Replace with OpenAL.
-                new FFmpegVideoDecoderRenderer(MainWindow.INSTANCE,
-                                               new FFmpegFramePool(width, height)));
+        conn.start(VideoDecoderRenderer.FLAG_PREFER_QUALITY,
+                   new JavaxAudioRenderer(), // TODO: Replace with OpenAL.
+                   new FFmpegVideoDecoderRenderer(MainWindow.INSTANCE, width, height));
 
-        Runtime.getRuntime().addShutdownHook(new Thread(conn::stop));
+        MainWindow.INSTANCE.setNvConnection(conn);
         MainWindow.INSTANCE.setListener(new DefaultMainWindowListener(conn));
-
-        // TODO: Remove the MainWindow.destroy() calls in networking code.
     }
 
     private void pair(Preferences prefs) throws Exception {
@@ -264,6 +256,18 @@ public final class Main {
             builder.setHevcSupported(true);
         }
         return builder.build();
+    }
+
+    private static void addShutdownHook(NvConnection conn) {
+        final Thread connStopper = new Thread(() -> {
+            try {
+                conn.stop().get();
+            } catch (Exception e) {
+                logger.warn("Failed to stop an NvConnection", e);
+            }
+        });
+        connStopper.setName("NvConnection stopper");
+        Runtime.getRuntime().addShutdownHook(connStopper);
     }
 
     public static void main(String[] args) throws Exception {

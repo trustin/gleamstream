@@ -5,7 +5,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedByInterruptException;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.DatagramChannel;
 import java.util.LinkedList;
 
@@ -13,12 +13,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
+import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.DecodeUnit;
 import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
-
-import kr.motd.gleamstream.MainWindow;
+import com.limelight.nvstream.av.RtpReorderQueue.RtpQueueStatus;
 
 public class VideoStream {
 
@@ -45,6 +45,7 @@ public class VideoStream {
 
     private final LinkedList<Thread> threads = new LinkedList<>();
 
+    private final NvConnection parent;
     private final ConnectionContext context;
     private final ConnectionStatusListener avConnListener;
     private VideoDepacketizer depacketizer;
@@ -52,9 +53,10 @@ public class VideoStream {
     private VideoDecoderRenderer decRend;
     private boolean startedRendering;
 
-    private boolean aborting;
+    private volatile boolean aborting;
 
-    public VideoStream(ConnectionContext context, ConnectionStatusListener avConnListener) {
+    public VideoStream(NvConnection parent, ConnectionContext context, ConnectionStatusListener avConnListener) {
+        this.parent = parent;
         this.context = context;
         this.avConnListener = avConnListener;
     }
@@ -66,37 +68,37 @@ public class VideoStream {
 
         aborting = true;
 
-        // Interrupt threads
-        for (Thread t : threads) {
-            t.interrupt();
-        }
-
         // Close the socket to interrupt the receive thread
         if (rtp != null) {
             try {
                 rtp.close();
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.warn("Failed to close a RTP connection", e);
             }
-        }
-        if (firstFrameSocket != null) {
-            try {
-                firstFrameSocket.close();
-            } catch (IOException e) {}
         }
 
         // Wait for threads to terminate
         for (Thread t : threads) {
+            while (t.isAlive()) {
+                t.interrupt();
+                try {
+                    t.join();
+                } catch (InterruptedException ignored) {}
+            }
+        }
+
+        if (firstFrameSocket != null) {
             try {
-                t.join();
-            } catch (InterruptedException e) { }
+                firstFrameSocket.close();
+            } catch (IOException e) {
+                logger.warn("Failed to close the first-frame socket", e);
+            }
         }
 
         if (decRend != null) {
             if (startedRendering) {
                 decRend.stop();
             }
-
             decRend.release();
         }
 
@@ -148,7 +150,7 @@ public class VideoStream {
 
                 startedRendering = true;
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.warn("Failed to initialize the VideoDecoderRender", e);
                 return false;
             }
         }
@@ -192,84 +194,80 @@ public class VideoStream {
 
     private void startReceiveThread() {
         // Receive thread
-        Thread t = new Thread() {
-            @Override
-            public void run() {
-                VideoPacket[] ring = new VideoPacket[VIDEO_RING_SIZE];
-                VideoPacket queuedPacket;
-                int ringIndex = 0;
-                RtpReorderQueue rtpQueue = new RtpReorderQueue(16, MAX_RTP_QUEUE_DELAY_MS);
-                RtpReorderQueue.RtpQueueStatus queueStatus;
+        Thread t = new Thread(() -> {
+            VideoPacket[] ring = new VideoPacket[VIDEO_RING_SIZE];
+            VideoPacket queuedPacket;
+            int ringIndex = 0;
+            RtpReorderQueue rtpQueue = new RtpReorderQueue(16, MAX_RTP_QUEUE_DELAY_MS);
+            RtpQueueStatus queueStatus;
 
-                boolean directSubmit = decRend != null && (decRend.getCapabilities() &
-                                                           VideoDecoderRenderer.CAPABILITY_DIRECT_SUBMIT)
-                                                          != 0;
+            boolean directSubmit = decRend != null && (decRend.getCapabilities() &
+                                                       VideoDecoderRenderer.CAPABILITY_DIRECT_SUBMIT) != 0;
 
-                // Preinitialize the ring buffer
-                int requiredBufferSize = context.streamConfig.getMaxPacketSize() + RtpPacket.MAX_HEADER_SIZE;
-                for (int i = 0; i < VIDEO_RING_SIZE; i++) {
-                    ring[i] = new VideoPacket(new byte[requiredBufferSize], !directSubmit);
-                }
-
-                ByteBuffer buffer;
-                int iterationStart;
-                while (!isInterrupted()) {
-                    try {
-                        // Pull the next buffer in the ring and reset it
-                        buffer = ring[ringIndex].getByteBuffer();
-                        buffer.clear();
-
-                        // Read the video data off the network
-                        rtp.read(buffer);
-                        buffer.flip();
-
-                        // Initialize the video packet
-                        ring[ringIndex].initializeWithLength(buffer.remaining());
-
-                        queueStatus = rtpQueue.addPacket(ring[ringIndex]);
-                        if (queueStatus == RtpReorderQueue.RtpQueueStatus.HANDLE_IMMEDIATELY) {
-                            // Submit immediately because the packet is in order
-                            depacketizer.addInputData(ring[ringIndex]);
-                        } else if (queueStatus == RtpReorderQueue.RtpQueueStatus.QUEUED_PACKETS_READY) {
-                            // The packet queue now has packets ready
-                            while ((queuedPacket = (VideoPacket) rtpQueue.getQueuedPacket()) != null) {
-                                depacketizer.addInputData(queuedPacket);
-                                queuedPacket.dereferencePacket();
-                            }
-                        }
-
-                        // If the DR supports direct submission, call the direct submit callback
-                        if (directSubmit) {
-                            DecodeUnit du;
-
-                            while ((du = depacketizer.pollNextDecodeUnit()) != null) {
-                                decRend.directSubmitDecodeUnit(du);
-                            }
-                        }
-
-                        // Go to the next free element in the ring
-                        iterationStart = ringIndex;
-                        do {
-                            ringIndex = (ringIndex + 1) % VIDEO_RING_SIZE;
-                            if (ringIndex == iterationStart) {
-                                // Reinitialize the video ring since they're all being used
-                                logger.warn("Packet ring wrapped around!");
-                                for (int i = 0; i < VIDEO_RING_SIZE; i++) {
-                                    ring[i] = new VideoPacket(new byte[requiredBufferSize], !directSubmit);
-                                }
-                                break;
-                            }
-                        } while (ring[ringIndex].getRefCount() != 0);
-                    } catch (ClosedByInterruptException e) {
-                        // Interrupted
-                        MainWindow.INSTANCE.destroy();
-                    } catch (IOException e) {
-                        logger.warn("Failed to receive a video packet", e);
-                        MainWindow.INSTANCE.destroy();
-                    }
-                }
+            // Preinitialize the ring buffer
+            int requiredBufferSize = context.streamConfig.getMaxPacketSize() + RtpPacket.MAX_HEADER_SIZE;
+            for (int i = 0; i < VIDEO_RING_SIZE; i++) {
+                ring[i] = new VideoPacket(new byte[requiredBufferSize], !directSubmit);
             }
-        };
+
+            ByteBuffer buffer;
+            int iterationStart;
+
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    // Pull the next buffer in the ring and reset it
+                    buffer = ring[ringIndex].getByteBuffer();
+                    buffer.clear();
+
+                    // Read the video data off the network
+                    rtp.read(buffer);
+                    buffer.flip();
+
+                    // Initialize the video packet
+                    ring[ringIndex].initializeWithLength(buffer.remaining());
+
+                    queueStatus = rtpQueue.addPacket(ring[ringIndex]);
+                    if (queueStatus == RtpQueueStatus.HANDLE_IMMEDIATELY) {
+                        // Submit immediately because the packet is in order
+                        depacketizer.addInputData(ring[ringIndex]);
+                    } else if (queueStatus == RtpQueueStatus.QUEUED_PACKETS_READY) {
+                        // The packet queue now has packets ready
+                        while ((queuedPacket = (VideoPacket) rtpQueue.getQueuedPacket()) != null) {
+                            depacketizer.addInputData(queuedPacket);
+                            queuedPacket.dereferencePacket();
+                        }
+                    }
+
+                    // If the DR supports direct submission, call the direct submit callback
+                    if (directSubmit) {
+                        DecodeUnit du;
+
+                        while ((du = depacketizer.pollNextDecodeUnit()) != null) {
+                            decRend.directSubmitDecodeUnit(du);
+                        }
+                    }
+
+                    // Go to the next free element in the ring
+                    iterationStart = ringIndex;
+                    do {
+                        ringIndex = (ringIndex + 1) % VIDEO_RING_SIZE;
+                        if (ringIndex == iterationStart) {
+                            // Reinitialize the video ring since they're all being used
+                            logger.warn("Packet ring wrapped around!");
+                            for (int i = 0; i < VIDEO_RING_SIZE; i++) {
+                                ring[i] = new VideoPacket(new byte[requiredBufferSize], !directSubmit);
+                            }
+                            break;
+                        }
+                    } while (ring[ringIndex].getRefCount() != 0);
+                }
+            } catch (ClosedChannelException ignored) {
+            } catch (IOException e) {
+                logger.warn("Failed to receive a video packet", e);
+            } finally {
+                parent.stop();
+            }
+        });
         threads.add(t);
         t.setName("Video - Receive");
         t.setPriority(Thread.MAX_PRIORITY - 1);
@@ -278,33 +276,25 @@ public class VideoStream {
 
     private void startUdpPingThread() {
         // Ping thread
-        Thread t = new Thread() {
-            @Override
-            public void run() {
-                // PING in ASCII
-                final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
+        Thread t = new Thread(() -> {
+            // PING in ASCII
+            final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
 
+            try {
                 // Send PING every 500 ms
-                while (!isInterrupted()) {
-                    try {
-                        pingPacketData.clear();
-                        rtp.write(pingPacketData);
-                    } catch (IOException e) {
-                        logger.warn("Failed to send a video ping", e);
-                        MainWindow.INSTANCE.destroy();
-                        return;
-                    }
-
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                        // Interrupted
-                        MainWindow.INSTANCE.destroy();
-                        return;
-                    }
+                while (!Thread.currentThread().isInterrupted()) {
+                    pingPacketData.clear();
+                    rtp.write(pingPacketData);
+                    Thread.sleep(500);
                 }
+            } catch (InterruptedException e) {
+                // Interrupted
+            } catch (IOException e) {
+                logger.warn("Failed to send a video ping", e);
+            } finally {
+                parent.stop();
             }
-        };
+        });
         threads.add(t);
         t.setName("Video - Ping");
         t.setPriority(Thread.MIN_PRIORITY);

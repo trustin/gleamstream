@@ -7,6 +7,8 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -49,6 +51,8 @@ public class NvConnection {
     private int drFlags;
     private AudioRenderer audioRenderer;
 
+    private volatile boolean stopped;
+
     public NvConnection(String host, String uniqueId, NvConnectionListener listener, StreamConfiguration config,
                         LimelightCryptoProvider cryptoProvider) {
         this.host = host;
@@ -63,7 +67,7 @@ public class NvConnection {
             context.riKey = generateRiAesKey();
         } catch (NoSuchAlgorithmException e) {
             // Should never happen
-            e.printStackTrace();
+            throw panic("Unexpected exception", e);
         }
 
         context.riKeyId = generateRiKeyId();
@@ -84,23 +88,38 @@ public class NvConnection {
         return new SecureRandom().nextInt();
     }
 
-    public void stop() {
-        if (inputStream != null) {
-            inputStream.abort();
-            inputStream = null;
-        }
+    public boolean isStopped() {
+        return stopped;
+    }
 
-        if (audioStream != null) {
-            audioStream.abort();
-        }
+    public Future<?> stop() {
+        return ForkJoinPool.commonPool().submit(() -> {
+            synchronized (this) {
+                try {
+                    if (inputStream != null) {
+                        inputStream.abort();
+                        inputStream = null;
+                    }
 
-        if (videoStream != null) {
-            videoStream.abort();
-        }
+                    if (audioStream != null) {
+                        audioStream.abort();
+                        audioStream = null;
+                    }
 
-        if (controlStream != null) {
-            controlStream.abort();
-        }
+                    if (videoStream != null) {
+                        videoStream.abort();
+                        videoStream = null;
+                    }
+
+                    if (controlStream != null) {
+                        controlStream.abort();
+                        controlStream = null;
+                    }
+                } finally {
+                    stopped = true;
+                }
+            }
+        });
     }
 
     private boolean startApp() throws XmlPullParserException, IOException {
@@ -188,7 +207,7 @@ public class NvConnection {
 
         NvApp app = context.streamConfig.getApp();
 
-        // If the client did not provide an exact app ID, do a lookup with the applist
+        // If the client did not provide an exact app ID, do a lookup with the app list
         if (!context.streamConfig.getApp().isInitialized()) {
             logger.info(
                     "Using deprecated app lookup method - Please specify an app ID in your StreamConfiguration instead");
@@ -272,19 +291,19 @@ public class NvConnection {
     }
 
     private boolean startControlStream() throws IOException {
-        controlStream = new ControlStream(context);
+        controlStream = new ControlStream(this, context);
         controlStream.initialize();
         controlStream.start();
         return true;
     }
 
     private boolean startVideoStream() throws IOException {
-        videoStream = new VideoStream(context, controlStream);
+        videoStream = new VideoStream(this, context, controlStream);
         return videoStream.startVideoStream(drFlags);
     }
 
     private boolean startAudioStream() throws IOException {
-        audioStream = new AudioStream(context, audioRenderer);
+        audioStream = new AudioStream(this, context, audioRenderer);
         return audioStream.startAudioStream();
     }
 
@@ -293,7 +312,7 @@ public class NvConnection {
         // it to the instance variable once the object is properly initialized.
         // This avoids the race where inputStream != null but inputStream.initialize()
         // has not returned yet.
-        ControllerStream tempController = new ControllerStream(context);
+        ControllerStream tempController = new ControllerStream(this, context);
         tempController.initialize(controlStream);
         tempController.start();
         inputStream = tempController;
@@ -345,20 +364,27 @@ public class NvConnection {
         logger.info("Connection has been started");
     }
 
-    public void start(int drFlags, AudioRenderer audioRenderer, VideoDecoderRenderer videoDecoderRenderer) {
+    public void start(int drFlags, AudioRenderer audioRenderer, VideoDecoderRenderer videoDecoderRenderer)
+            throws UnknownHostException {
+
         this.drFlags = drFlags;
         this.audioRenderer = audioRenderer;
         context.videoDecoderRenderer = videoDecoderRenderer;
 
-        new Thread(() -> {
-            try {
-                context.serverAddress = InetAddress.getByName(host);
-            } catch (UnknownHostException e) {
-                throw panic("Connection has been terminated", e);
-            }
-
+        boolean success = false;
+        try {
+            context.serverAddress = InetAddress.getByName(host);
             establishConnection();
-        }).start();
+            success = true;
+        } finally {
+            if (!success) {
+                try {
+                    stop().get();
+                } catch (Exception e) {
+                    logger.warn("Failed to stop an NvConnection", e);
+                }
+            }
+        }
     }
 
     public void sendMouseMove(final short deltaX, final short deltaY) {
