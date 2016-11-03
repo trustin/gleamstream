@@ -14,8 +14,6 @@ import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.internal.Console;
 import com.limelight.binding.audio.JavaxAudioRenderer;
 import com.limelight.binding.crypto.PcCryptoProvider;
-import com.limelight.input.gamepad.GamepadHandler;
-import com.limelight.input.gamepad.GamepadListener;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
@@ -198,6 +196,7 @@ public final class Main {
 
         MainWindow.INSTANCE.setNvConnection(conn);
         MainWindow.INSTANCE.setListener(new DefaultMainWindowListener(conn));
+        MainWindow.INSTANCE.setOsdVisibility(false);
     }
 
     private void pair(Preferences prefs) throws Exception {

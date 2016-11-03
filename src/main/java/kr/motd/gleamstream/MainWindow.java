@@ -78,7 +78,6 @@ import static org.lwjgl.opengl.GL30.glBlitFramebuffer;
 import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
 import static org.lwjgl.opengl.GL30.glFramebufferTexture2D;
 import static org.lwjgl.opengl.GL30.glGenFramebuffers;
-import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
 import java.nio.IntBuffer;
@@ -91,7 +90,7 @@ import org.jctools.queues.SpscArrayQueue;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
-import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.system.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,11 +116,10 @@ public class MainWindow {
     private NuklearHelper nk;
     private int frameTexture;
     private int frameBuffer;
-    private boolean receivedFirstFrame;
     private FFmpegFrame lastFrame;
 
     private long lastGravePressTime = System.nanoTime();
-    private boolean showOsd;
+    private boolean showOsd = true;
 
     private long lastFpsCheckTime = System.nanoTime();
     private int droppedFrameCounter;
@@ -156,6 +154,20 @@ public class MainWindow {
         thread.start();
 
         return startFuture;
+    }
+
+    public void setOsdVisibility(boolean visible) {
+        pendingTasks.add(() -> setOsdVisibility(window, visible));
+    }
+
+    private void setOsdVisibility(long window, boolean visible) {
+        showOsd = visible;
+        if (visible) {
+            Osd.INSTANCE.follow();
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        } else {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
     }
 
     public void destroy() {
@@ -284,36 +296,36 @@ public class MainWindow {
     }
 
     private void loop() {
-        while (!glfwWindowShouldClose(window) && (nvConn == null || !nvConn.isStopped())) {
-            // Get the width and height of the frame buffer.
-            int width;
-            int height;
-            try (MemoryStack stack = stackPush()) {
-                IntBuffer widthBuf = stack.mallocInt(1);
-                IntBuffer heightBuf = stack.mallocInt(1);
-
+        final IntBuffer widthBuf = MemoryUtil.memAllocInt(1);
+        final IntBuffer heightBuf = MemoryUtil.memAllocInt(1);
+        try {
+            while (!glfwWindowShouldClose(window) && (nvConn == null || !nvConn.isStopped())) {
+                // Get the width and height of the frame buffer.
                 glfwGetFramebufferSize(window, widthBuf, heightBuf);
-                width = widthBuf.get(0);
-                height = heightBuf.get(0);
+                final int width = widthBuf.get(0);
+                final int height = heightBuf.get(0);
+
+                // Set the viewport and clear.
+                glViewport(0, 0, width, height);
+                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                handlePendingFrames(width, height);
+                handlePendingTasks();
+
+                if (showOsd) {
+                    nk.prepare();
+                    Osd.INSTANCE.layout(nk, width, height);
+                    nk.render();
+                } else {
+                    glfwSetKeyCallback(window, this::onKey);
+                    glfwPollEvents();
+                }
+                glfwSwapBuffers(window); // swap the color buffers
             }
-
-            // Set the viewport and clear.
-            glViewport(0, 0, width, height);
-            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            handlePendingFrames(width, height);
-            handlePendingTasks();
-
-            if (showOsd || !receivedFirstFrame) {
-                nk.prepare();
-                Osd.INSTANCE.layout(nk, width, height);
-                nk.render();
-            } else {
-                glfwSetKeyCallback(window, this::onKey);
-                glfwPollEvents();
-            }
-            glfwSwapBuffers(window); // swap the color buffers
+        } finally {
+            MemoryUtil.memFree(widthBuf);
+            MemoryUtil.memFree(heightBuf);
         }
     }
 
@@ -335,8 +347,6 @@ public class MainWindow {
 
         final FFmpegFrame e = pendingFrames.poll();
         releaseLastFrame();
-
-        receivedFirstFrame = true;
         drawFrame(width, height, e);
 
         lastFrame = e;
@@ -417,13 +427,7 @@ public class MainWindow {
             // Toggle the OSD if the grave (backquote) key was pressed twice within one second.
             final long currentTime = System.nanoTime();
             if (currentTime - lastGravePressTime < 1000000000L) {
-                showOsd = !showOsd;
-                if (showOsd) {
-                    Osd.INSTANCE.follow();
-                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                } else {
-                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                }
+                setOsdVisibility(window, !showOsd);
                 return;
             }
             lastGravePressTime = currentTime;
