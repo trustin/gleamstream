@@ -305,8 +305,8 @@ public final class NuklearHelper {
             lineHeight = display_height / 20;
         }
 
-        int BITMAP_W = 1024;
-        int BITMAP_H = 1024;
+        int BITMAP_W = 2048;
+        int BITMAP_H = 2048;
 
         int fontHeight = lineHeight;
         int fontTexID = glGenTextures();
