@@ -85,3 +85,10 @@ tasks.withType(JavaCompile) {
     options.warnings = false
     options.debug = true
 }
+
+run {
+    if (project.hasProperty('appArgs')) {
+        args appArgs.split('[ \t]+')
+    }
+}
+
