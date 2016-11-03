@@ -1,5 +1,7 @@
 package com.limelight.settings;
 
+import static com.google.common.base.MoreObjects.firstNonNull;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -8,6 +10,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Serializable;
 
+import org.lwjgl.system.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +29,36 @@ public class SettingsManager {
     /**
      * Directory to which settings will be saved
      */
-    public static final String SETTINGS_DIR = System.getProperty("user.home") + File.separator + "Limelight";
+    public static final String SETTINGS_DIR;
+
+    static {
+        final String configHome;
+        switch (Platform.get()) {
+            case LINUX:
+                configHome = firstNonNull(System.getenv("XDG_CONFIG_HOME"),
+                                          System.getProperty("user.home") + File.separator + ".config");
+                break;
+            case MACOSX:
+                configHome = System.getProperty("user.home") + File.separator +
+                             "Library" + File.separator +
+                             "Application Support";
+                break;
+            case WINDOWS:
+                configHome = firstNonNull(System.getenv("APPDATA"),
+                                          System.getProperty("user.home") + File.separator +
+                                          "AppData" + File.separator +
+                                          "Roaming");
+                break;
+            default:
+                throw new IllegalStateException("Unsupported platform: " + Platform.get());
+        }
+
+        if (configHome.endsWith(File.separator)) {
+            SETTINGS_DIR = configHome + "gleamstream";
+        } else {
+            SETTINGS_DIR = configHome + File.separator + "gleamstream";
+        }
+    }
 
     //directory to hold limelight settings
     private final File settingsDir;

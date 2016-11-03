@@ -112,7 +112,6 @@ public final class Main {
             return;
         }
 
-        // TODO: Comply with FreeDesktop.org guideline for storing configs. ($XDG_CONFIG_DIR)
         // TODO: Device name pattern matching + built-in gamepad mapping presets
         Preferences prefs = PreferencesManager.getPreferences();
         // Save preferences to preserve possibly new unique ID
