@@ -212,7 +212,6 @@ public final class Main {
     private void pair(Preferences prefs) throws Exception {
         final LimelightCryptoProvider crypto = new PcCryptoProvider();
         final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(pairHost), prefs.getUniqueId(), crypto);
-        final PairingManager pairMan = new PairingManager(nvHttp, crypto);
         final String serverInfo = nvHttp.getServerInfo();
         if (nvHttp.getPairState(serverInfo) == PairState.PAIRED) {
             console.println("Paired already with " + pairHost);
@@ -227,7 +226,7 @@ public final class Main {
         final String pin = PairingManager.generatePinString();
 
         console.println("Pairing with " + pairHost + "; enter the PIN '" + pin + "' on the server ..");
-        final PairState state = pairMan.pair(serverInfo, pin);
+        final PairState state = nvHttp.pair(serverInfo, pin);
 
         switch (state) {
             case NOT_PAIRED:

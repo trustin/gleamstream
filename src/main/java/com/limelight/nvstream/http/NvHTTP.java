@@ -116,6 +116,7 @@ public class NvHTTP {
         httpClient.setConnectionPool(new ConnectionPool(0, 60000));
         httpClient.setHostnameVerifier(hv);
         httpClient.setConnectTimeout(CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS);
+        httpClient.setReadTimeout(5, TimeUnit.MINUTES);
 
         httpClientWithReadTimeout = httpClient.clone();
         httpClientWithReadTimeout.setReadTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS);
