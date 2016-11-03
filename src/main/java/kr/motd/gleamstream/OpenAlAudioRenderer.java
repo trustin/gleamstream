@@ -4,6 +4,7 @@ import static kr.motd.gleamstream.Panic.panic;
 import static org.lwjgl.openal.AL.createCapabilities;
 import static org.lwjgl.openal.AL10.AL_BUFFERS_PROCESSED;
 import static org.lwjgl.openal.AL10.AL_FORMAT_STEREO16;
+import static org.lwjgl.openal.AL10.AL_GAIN;
 import static org.lwjgl.openal.AL10.AL_NO_ERROR;
 import static org.lwjgl.openal.AL10.AL_PLAYING;
 import static org.lwjgl.openal.AL10.AL_SOURCE_STATE;
@@ -18,6 +19,7 @@ import static org.lwjgl.openal.AL10.alGetString;
 import static org.lwjgl.openal.AL10.alSourcePlay;
 import static org.lwjgl.openal.AL10.alSourceQueueBuffers;
 import static org.lwjgl.openal.AL10.alSourceUnqueueBuffers;
+import static org.lwjgl.openal.AL10.alSourcef;
 import static org.lwjgl.openal.ALC10.ALC_DEFAULT_DEVICE_SPECIFIER;
 import static org.lwjgl.openal.ALC10.alcCloseDevice;
 import static org.lwjgl.openal.ALC10.alcCreateContext;
@@ -156,6 +158,8 @@ public final class OpenAlAudioRenderer implements AudioRenderer {
             destroy();
             return false;
         }
+
+        alSourcef(source, AL_GAIN, 1.0f);
 
         directBuffer = MemoryUtil.memAlloc(8192);
         return true;

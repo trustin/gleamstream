@@ -1,13 +1,8 @@
 package com.limelight.input.gamepad;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.limelight.utils.NativeLibraries;
 
 public final class NativeGamepad {
-
-    private static final Logger logger = LoggerFactory.getLogger(NativeGamepad.class);
 
     public static final int DEFAULT_DEVICE_POLLING_ITERATIONS = 400;
     public static final int DEFAULT_EVENT_POLLING_INTERVAL = 5;
@@ -17,6 +12,7 @@ public final class NativeGamepad {
     private static Thread pollingThread;
     private static int devicePollingIterations = DEFAULT_DEVICE_POLLING_ITERATIONS;
     private static int pollingIntervalMs = DEFAULT_EVENT_POLLING_INTERVAL;
+    private static volatile GamepadListener listener;
 
     static {
         NativeLibraries.load("gamepad_jni");
@@ -52,9 +48,10 @@ public final class NativeGamepad {
         return pollingIntervalMs;
     }
 
-    public static void start() {
+    public static void start(GamepadListener listener) {
         if (!running) {
             running = true;
+            NativeGamepad.listener = listener;
             startPolling();
         }
     }
@@ -139,25 +136,43 @@ public final class NativeGamepad {
     }
 
     public static void deviceAttachCallback(int deviceId, int numButtons, int numAxes) {
-        logger.info(deviceId + " has attached.");
-        GamepadListener.deviceAttached(deviceId, numButtons, numAxes);
+        final GamepadListener l = listener;
+        if (l == null) {
+            return;
+        }
+        l.handleDeviceAdded(deviceId);
     }
 
     public static void deviceRemoveCallback(int deviceId) {
-        logger.info(deviceId + " has detached.");
-        GamepadListener.deviceRemoved(deviceId);
+        final GamepadListener l = listener;
+        if (l == null) {
+            return;
+        }
+        l.handleDeviceRemoved(deviceId);
     }
 
     public static void buttonUpCallback(int deviceId, int buttonId) {
-        GamepadListener.buttonUp(deviceId, buttonId);
+        final GamepadListener l = listener;
+        if (l == null) {
+            return;
+        }
+        l.handleButton(deviceId, buttonId, false);
     }
 
     public static void buttonDownCallback(int deviceId, int buttonId) {
-        GamepadListener.buttonDown(deviceId, buttonId);
+        final GamepadListener l = listener;
+        if (l == null) {
+            return;
+        }
+        l.handleButton(deviceId, buttonId, true);
     }
 
     public static void axisMovedCallback(int deviceId, int axisId, float value, float lastValue) {
-        GamepadListener.axisMoved(deviceId, axisId, value, lastValue);
+        final GamepadListener l = listener;
+        if (l == null) {
+            return;
+        }
+        l.handleAxis(deviceId, axisId, value, lastValue);
     }
 
     private NativeGamepad() {}

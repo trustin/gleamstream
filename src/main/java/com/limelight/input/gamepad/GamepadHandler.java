@@ -1,12 +1,8 @@
 package com.limelight.input.gamepad;
 
-import java.util.HashMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.limelight.input.Device;
-import com.limelight.input.DeviceListener;
 import com.limelight.input.gamepad.GamepadMapping.Mapping;
 import com.limelight.input.gamepad.SourceComponent.Direction;
 import com.limelight.input.gamepad.SourceComponent.Type;
@@ -14,11 +10,14 @@ import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.ControllerPacket;
 import com.limelight.settings.GamepadSettingsManager;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+
 /**
  * Represents a gamepad connected to the system
  * @author Diego Waxemberg
  */
-public class GamepadHandler implements DeviceListener {
+public class GamepadHandler implements GamepadListener {
 
     private static final Logger logger = LoggerFactory.getLogger(GamepadHandler.class);
 
@@ -55,41 +54,35 @@ public class GamepadHandler implements DeviceListener {
         }
     }
 
-    private NvConnection conn;
-    private final HashMap<Device, Gamepad> gamepads = new HashMap<>();
+    private final NvConnection conn;
+    private final Int2ObjectMap<Gamepad> gamepads = new Int2ObjectOpenHashMap<>();
     private int currentControllers;
 
     public GamepadHandler(NvConnection conn) {
         this.conn = conn;
     }
 
-    public GamepadHandler() {
-        this(null);
-    }
-
-    private Gamepad getGamepad(Device dev, boolean create) {
-        Gamepad gamepad = gamepads.get(dev);
+    private Gamepad getGamepad(int deviceId, boolean create) {
+        Gamepad gamepad = gamepads.get(deviceId);
         if (gamepad != null) {
             return gamepad;
-        } else if (create) {
-            gamepad = new Gamepad();
-            gamepad.mapping = GamepadSettingsManager.getSettings();
-            gamepad.assignControllerNumber();
-            gamepads.put(dev, gamepad);
-            return gamepad;
-        } else {
+        }
+
+        if (!create) {
             return null;
         }
-    }
 
-    public void setConnection(NvConnection conn) {
-        this.conn = conn;
+        gamepad = new Gamepad();
+        gamepad.mapping = GamepadSettingsManager.getSettings();
+        gamepad.assignControllerNumber();
+        gamepads.put(deviceId, gamepad);
+        return gamepad;
     }
 
     @Override
-    public void handleButton(Device device, int buttonId, boolean pressed) {
-        Gamepad gamepad = getGamepad(device, true);
-        Mapping mapped = gamepad.mapping.get(new SourceComponent(Type.BUTTON, buttonId, null));
+    public void handleButton(int deviceId, int buttonId, boolean pressed) {
+        final Gamepad gamepad = getGamepad(deviceId, true);
+        final Mapping mapped = gamepad.mapping.get(new SourceComponent(Type.BUTTON, buttonId, null));
         if (mapped == null) {
             //LimeLog.info("Unmapped button pressed: " + buttonId);
             return;
@@ -106,8 +99,13 @@ public class GamepadHandler implements DeviceListener {
     }
 
     @Override
-    public void handleAxis(Device device, int axisId, float newValue, float lastValue) {
-        Direction mappedDir;
+    public void handleAxis(int deviceId, int axisId, float newValue, float lastValue) {
+        final Gamepad gamepad = getGamepad(deviceId, false);
+        if (gamepad == null) {
+            return;
+        }
+
+        final Direction mappedDir;
         if (newValue == 0) {
             if (lastValue > 0) {
                 mappedDir = Direction.POSITIVE;
@@ -118,14 +116,13 @@ public class GamepadHandler implements DeviceListener {
             mappedDir = newValue > 0 ? Direction.POSITIVE : Direction.NEGATIVE;
         }
 
-        Gamepad gamepad = getGamepad(device, true);
-        Mapping mapped = gamepad.mapping.get(new SourceComponent(Type.AXIS, axisId, mappedDir));
+        final Mapping mapped = gamepad.mapping.get(new SourceComponent(Type.AXIS, axisId, mappedDir));
         if (mapped == null) {
             //LimeLog.info("Unmapped axis moved: " + axisId);
             return;
         }
-        float value = sanitizeValue(mapped, newValue);
 
+        final float value = sanitizeValue(mapped, newValue);
         if (mapped.padComp.isAnalog()) {
             handleAnalogComponent(gamepad, mapped.padComp, value);
         } else {
@@ -196,7 +193,7 @@ public class GamepadHandler implements DeviceListener {
                 gamepad.rightTrigger = (byte) (Math.abs(value) * 0xFF);
                 break;
             default:
-                logger.warn("A mapping error has occured. Ignoring: " + padComp.name());
+                logger.warn("A mapping error has occurred. Ignoring: " + padComp.name());
                 break;
         }
 
@@ -275,7 +272,7 @@ public class GamepadHandler implements DeviceListener {
      * used for debugging, normally unused.
      */
     @SuppressWarnings("unused")
-    private static void printInfo(Device device, SourceComponent sourceComp, GamepadComponent padComp,
+    private static void printInfo(int deviceId, SourceComponent sourceComp, GamepadComponent padComp,
                                   float value) {
 
         StringBuilder builder = new StringBuilder();
@@ -300,17 +297,16 @@ public class GamepadHandler implements DeviceListener {
     }
 
     @Override
-    public void handleDeviceAdded(Device device) {
-        // Causes the creation of the gamepad object
-        getGamepad(device, true);
+    public void handleDeviceAdded(int deviceId) {
+        // Do not create the gamepad object until the first button press.
     }
 
     @Override
-    public void handleDeviceRemoved(Device device) {
-        Gamepad gamepad = getGamepad(device, false);
+    public void handleDeviceRemoved(int deviceId) {
+        final Gamepad gamepad = getGamepad(deviceId, false);
         if (gamepad != null) {
             gamepad.releaseControllerNumber();
+            gamepads.remove(deviceId);
         }
     }
-
 }

@@ -139,9 +139,8 @@ public class MainWindow {
         this.nvConn = nvConn;
 
         // TODO: Replace with GLFW's Joystick API.
-        final GamepadHandler gamepad = new GamepadHandler(nvConn);
-        GamepadListener.addDeviceListener(gamepad);
-        NativeGamepad.start();
+        final GamepadHandler gamepadHandler = new GamepadHandler(nvConn);
+        NativeGamepad.start(gamepadHandler);
     }
 
     public void setListener(MainWindowListener listener) {
