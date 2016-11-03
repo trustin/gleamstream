@@ -147,7 +147,7 @@ public final class Osd {
             final float spacing = ctx.style().window().spacing().y();
             final NkPanel panel = nk_window_get_panel(ctx);
             nk_layout_row_dynamic(ctx, lineHeight, 1);
-            for (String l : logLines) {
+            for (String l : logLineArray) {
                 if (l == null) {
                     break;
                 }

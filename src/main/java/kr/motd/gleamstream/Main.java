@@ -12,7 +12,6 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.internal.Console;
-import com.limelight.binding.audio.JavaxAudioRenderer;
 import com.limelight.binding.crypto.PcCryptoProvider;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
@@ -191,7 +190,7 @@ public final class Main {
         addShutdownHook(conn);
 
         conn.start(VideoDecoderRenderer.FLAG_PREFER_QUALITY,
-                   new JavaxAudioRenderer(), // TODO: Replace with OpenAL.
+                   new OpenAlAudioRenderer(),
                    new FFmpegVideoDecoderRenderer(MainWindow.INSTANCE, width, height));
 
         MainWindow.INSTANCE.setNvConnection(conn);
