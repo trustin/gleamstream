@@ -314,7 +314,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         doStartA();
         doStartB();
 
-        // Return to an infinte read timeout after the initial control handshake
+        // Return to an infinite read timeout after the initial control handshake
         if (s != null) {
             s.setSoTimeout(0);
         }
