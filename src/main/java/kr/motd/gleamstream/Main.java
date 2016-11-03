@@ -12,12 +12,12 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.internal.Console;
-import com.limelight.binding.crypto.PcCryptoProvider;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
-import com.limelight.nvstream.http.LimelightCryptoProvider;
+import com.limelight.nvstream.http.CryptoProvider;
+import com.limelight.nvstream.http.DefaultCryptoProvider;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
@@ -185,7 +185,7 @@ public final class Main {
 
         final NvConnection conn = new NvConnection(
                 connectHost, prefs.getUniqueId(), connListener, streamConfig,
-                new PcCryptoProvider());
+                new DefaultCryptoProvider());
 
         addShutdownHook(conn);
 
@@ -199,7 +199,7 @@ public final class Main {
     }
 
     private void pair(Preferences prefs) throws Exception {
-        final LimelightCryptoProvider crypto = new PcCryptoProvider();
+        final CryptoProvider crypto = new DefaultCryptoProvider();
         final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(pairHost), prefs.getUniqueId(), crypto);
         final String serverInfo = nvHttp.getServerInfo();
         if (nvHttp.getPairState(serverInfo) == PairState.PAIRED) {

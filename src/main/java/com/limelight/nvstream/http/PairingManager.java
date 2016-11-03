@@ -48,7 +48,7 @@ public class PairingManager {
         ALREADY_IN_PROGRESS
     }
 
-    public PairingManager(NvHTTP http, LimelightCryptoProvider cryptoProvider) {
+    public PairingManager(NvHTTP http, CryptoProvider cryptoProvider) {
         this.http = http;
         cert = cryptoProvider.getClientCertificate();
         pemCertBytes = cryptoProvider.getPemEncodedClientCertificate();

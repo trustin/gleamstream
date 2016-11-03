@@ -96,7 +96,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.input.gamepad.GamepadHandler;
-import com.limelight.input.gamepad.GamepadListener;
 import com.limelight.input.gamepad.NativeGamepad;
 import com.limelight.nvstream.NvConnection;
 

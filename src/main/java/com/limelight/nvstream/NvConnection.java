@@ -23,8 +23,8 @@ import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer.VideoFormat;
 import com.limelight.nvstream.av.video.VideoStream;
 import com.limelight.nvstream.control.ControlStream;
+import com.limelight.nvstream.http.CryptoProvider;
 import com.limelight.nvstream.http.GfeHttpResponseException;
-import com.limelight.nvstream.http.LimelightCryptoProvider;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
@@ -37,7 +37,7 @@ public class NvConnection {
 
     // Context parameters
     private final String host;
-    private final LimelightCryptoProvider cryptoProvider;
+    private final CryptoProvider cryptoProvider;
     private final String uniqueId;
     private final ConnectionContext context;
 
@@ -54,7 +54,7 @@ public class NvConnection {
     private volatile boolean stopped;
 
     public NvConnection(String host, String uniqueId, NvConnectionListener listener, StreamConfiguration config,
-                        LimelightCryptoProvider cryptoProvider) {
+                        CryptoProvider cryptoProvider) {
         this.host = host;
         this.cryptoProvider = cryptoProvider;
         this.uniqueId = uniqueId;

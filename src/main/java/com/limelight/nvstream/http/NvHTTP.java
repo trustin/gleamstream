@@ -66,7 +66,7 @@ public class NvHTTP {
     private TrustManager[] trustAllCerts;
     private KeyManager[] ourKeyman;
 
-    private void initializeHttpState(final LimelightCryptoProvider cryptoProvider) {
+    private void initializeHttpState(final CryptoProvider cryptoProvider) {
         trustAllCerts = new TrustManager[] {
                 new X509TrustManager() {
                     @Override
@@ -124,7 +124,7 @@ public class NvHTTP {
     }
 
     public NvHTTP(InetAddress host, String uniqueId,
-                  LimelightCryptoProvider cryptoProvider) {
+                  CryptoProvider cryptoProvider) {
         this.uniqueId = uniqueId;
         address = host;
 

@@ -1,4 +1,6 @@
-package com.limelight.binding.crypto;
+package com.limelight.nvstream.http;
+
+import static kr.motd.gleamstream.Panic.panic;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -36,16 +38,14 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.bouncycastle.util.encoders.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.limelight.nvstream.http.LimelightCryptoProvider;
 import com.limelight.settings.SettingsManager;
 
-public class PcCryptoProvider implements LimelightCryptoProvider {
+public class DefaultCryptoProvider implements CryptoProvider {
 
-    private static final Logger logger = LoggerFactory.getLogger(PcCryptoProvider.class);
+    private static final Logger logger = LoggerFactory.getLogger(DefaultCryptoProvider.class);
 
     private final File certFile = new File(SettingsManager.SETTINGS_DIR + File.separator + "client.crt");
     private final File keyFile = new File(SettingsManager.SETTINGS_DIR + File.separator + "client.key");
@@ -71,7 +71,7 @@ public class PcCryptoProvider implements LimelightCryptoProvider {
             fin.close();
             return fileData;
         } catch (IOException e) {
-            return null;
+            throw panic("Failed to read a file: " + f, e);
         }
     }
 
@@ -98,12 +98,9 @@ public class PcCryptoProvider implements LimelightCryptoProvider {
             return false;
         } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
             // Should never happen
-            e.printStackTrace();
-            return false;
+            throw panic(e);
         } catch (InvalidKeySpecException e) {
-            // May happen if the key is corrupt
-            logger.warn("Corrupted key");
-            return false;
+            throw panic("Corrupted key?", e);
         }
 
         logger.info("Loaded key pair from disk");
@@ -119,10 +116,9 @@ public class PcCryptoProvider implements LimelightCryptoProvider {
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA", "BC");
             keyPairGenerator.initialize(2048);
             keyPair = keyPairGenerator.generateKeyPair();
-        } catch (NoSuchAlgorithmException | NoSuchProviderException e1) {
+        } catch (Exception e) {
             // Should never happen
-            e1.printStackTrace();
-            return false;
+            throw panic(e);
         }
 
         Date now = new Date();
@@ -144,7 +140,6 @@ public class PcCryptoProvider implements LimelightCryptoProvider {
                                                                             SubjectPublicKeyInfo.getInstance(
                                                                                     keyPair.getPublic()
                                                                                            .getEncoded()));
-
         try {
             ContentSigner sigGen = new JcaContentSignerBuilder("SHA1withRSA").setProvider(
                     BouncyCastleProvider.PROVIDER_NAME).build(keyPair.getPrivate());
@@ -153,8 +148,7 @@ public class PcCryptoProvider implements LimelightCryptoProvider {
             key = (RSAPrivateKey) keyPair.getPrivate();
         } catch (Exception e) {
             // Nothing should go wrong here
-            e.printStackTrace();
-            return false;
+            throw panic(e);
         }
 
         logger.info("Generated a new key pair");
@@ -193,11 +187,11 @@ public class PcCryptoProvider implements LimelightCryptoProvider {
             certOut.close();
             keyOut.close();
 
-            logger.info("Saved generated key pair to disk");
+            logger.info("Saved the generated key pair");
         } catch (IOException e) {
             // This isn't good because it means we'll have
             // to re-pair next time
-            e.printStackTrace();
+            logger.warn("Failed to save the generated key pair", e);
         }
     }
 
@@ -257,10 +251,5 @@ public class PcCryptoProvider implements LimelightCryptoProvider {
 
         // Return a cached value if we have it
         return pemCertBytes;
-    }
-
-    @Override
-    public String encodeBase64String(byte[] data) {
-        return Base64.toBase64String(data);
     }
 }

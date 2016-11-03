@@ -20,6 +20,10 @@ public final class NativeLibraries {
 
     private static final String OS_CLASSIFIER = new DefaultDetector().detect();
 
+    static {
+        logger.info("OS classifier: {}", OS_CLASSIFIER);
+    }
+
     public static void load(String name) {
         final String resourcePath = '/' + OS_CLASSIFIER + '/' + System.mapLibraryName(name);
         final InputStream in = NativeLibraries.class.getResourceAsStream(resourcePath);
@@ -65,7 +69,7 @@ public final class NativeLibraries {
 
     private NativeLibraries() {}
 
-    private static class DefaultDetector extends Detector {
+    private static final class DefaultDetector extends Detector {
 
         String detect() {
             Properties props = new Properties();
@@ -74,13 +78,9 @@ public final class NativeLibraries {
         }
 
         @Override
-        protected void log(String msg) {
-            logger.debug(msg);
-        }
+        protected void log(String msg) {}
 
         @Override
-        protected void logProperty(String name, String value) {
-            logger.debug("{}: {}", name, value);
-        }
+        protected void logProperty(String name, String value) {}
     }
 }
