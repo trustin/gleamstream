@@ -20,13 +20,16 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 import org.lwjgl.nuklear.NkContext;
 import org.lwjgl.nuklear.NkPanel;
 import org.lwjgl.nuklear.NkRect;
 import org.lwjgl.nuklear.NkVec2;
 import org.lwjgl.system.MemoryStack;
+
+import com.google.common.math.DoubleMath;
 
 public final class Osd {
 
@@ -40,7 +43,8 @@ public final class Osd {
             "   ."
     };
 
-    private final LinkedList<String> logLines = new LinkedList<>();
+    private final Deque<String> logLines = new ArrayDeque<>(MAX_LOG_LINES);
+    private final String[] logLineArray = new String[MAX_LOG_LINES];
     private final OutputStream outputStream = new LogLineOutputStream();
     private long lastProgressUpdateTime;
     private String progressText;
@@ -70,10 +74,15 @@ public final class Osd {
         progressText = null;
     }
 
+    public void follow() {
+        wasFollowing = true;
+    }
+
     public void layout(NuklearHelper nk, int width, int height) {
         final int lineHeight = nk.lineHeight();
         final String progressText;
         final int progressDotIdx;
+
         synchronized (this) {
             progressText = this.progressText;
             if (progressText != null && this.progressDotIdx > 0) {
@@ -122,24 +131,31 @@ public final class Osd {
     private void drawLogLines(NkContext ctx, MemoryStack stack, int y, int width, int height, int lineHeight) {
         NkRect rect = NkRect.mallocStack(stack);
         if (nk_begin(ctx, "Log messages", nk_rect(0, y, width, height - y, rect), NK_WINDOW_TITLE)) {
-            NkVec2 position = NkVec2.mallocStack(stack).set(0, y);
-            NkVec2 size = NkVec2.mallocStack(stack).set(width, height - y);
-            nk_window_set_position(ctx, position);
-            nk_window_set_size(ctx, size);
+            if (!DoubleMath.fuzzyEquals(rect.y(), y, 0.5)) {
+                NkVec2 position = NkVec2.mallocStack(stack).set(0, y);
+                NkVec2 size = NkVec2.mallocStack(stack).set(width, height - y);
+                nk_window_set_position(ctx, position);
+                nk_window_set_size(ctx, size);
+            }
 
-            final String[] lines;
+            final int numLogLines;
             synchronized (logLines) {
-                lines = logLines.toArray(new String[logLines.size()]);
+                numLogLines = logLines.size();
+                logLines.toArray(logLineArray);
             }
 
             final float spacing = ctx.style().window().spacing().y();
             final NkPanel panel = nk_window_get_panel(ctx);
             nk_layout_row_dynamic(ctx, lineHeight, 1);
-            for (String l : lines) {
+            for (String l : logLines) {
+                if (l == null) {
+                    break;
+                }
+
                 nk_text(ctx, l, NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_MIDDLE);
             }
 
-            final int maxOffsetY = (int) ((lineHeight + spacing) * lines.length - panel.bounds().h());
+            final int maxOffsetY = (int) ((lineHeight + spacing) * numLogLines - panel.bounds().h());
 
             if (ctx.input().mouse().scroll_delta() > 0) {
                 wasFollowing = false;
@@ -148,7 +164,6 @@ public final class Osd {
             } else {
                 nk_input_scroll(ctx, -maxOffsetY);
             }
-
         }
         nk_end(ctx);
     }
@@ -159,22 +174,33 @@ public final class Osd {
         private int cnt;
 
         @Override
+        public synchronized void write(byte[] buf, int off, int len) {
+            final int endOffset = off + len;
+            for (int i = off; i < endOffset; i++) {
+                write0(buf[i]);
+            }
+        }
+
+        @Override
         public synchronized void write(int b) {
+            write0(b);
+        }
+
+        private void write0(int b) {
+            if (cnt == buf.length) {
+                return;
+            }
+
             if (b == '\n') {
-                if (cnt == 0) {
-                    synchronized (logLines) {
-                        logLines.add("");
+                final String line = cnt != 0 ? new String(buf, 0, cnt, StandardCharsets.US_ASCII) : "";
+                synchronized (logLines) {
+                    if (logLines.size() == MAX_LOG_LINES) {
+                        logLines.removeFirst();
                     }
-                } else {
-                    synchronized (logLines) {
-                        logLines.add(new String(buf, 0, cnt, StandardCharsets.US_ASCII));
-                        while (logLines.size() > MAX_LOG_LINES) {
-                            logLines.removeFirst();
-                        }
-                    }
-                    cnt = 0;
+                    logLines.addLast(line);
                 }
-            } else {
+                cnt = 0;
+            } else if (b != '\r') {
                 buf[cnt++] = (byte) b;
             }
         }

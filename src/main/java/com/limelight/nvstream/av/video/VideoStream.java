@@ -7,7 +7,8 @@ import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.DatagramChannel;
-import java.util.LinkedList;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +44,7 @@ public class VideoStream {
     private DatagramChannel rtp;
     private Socket firstFrameSocket;
 
-    private final LinkedList<Thread> threads = new LinkedList<>();
+    private final List<Thread> threads = new ArrayList<>();
 
     private final NvConnection parent;
     private final ConnectionContext context;

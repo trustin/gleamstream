@@ -13,7 +13,8 @@ import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.util.LinkedList;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.ListIterator;
 import java.util.Scanner;
 import java.util.Stack;
@@ -471,7 +472,7 @@ public class NvHTTP {
     }
 
     public NvApp getAppById(int appId) throws IOException, XmlPullParserException {
-        LinkedList<NvApp> appList = getAppList();
+        List<NvApp> appList = getAppList();
         for (NvApp appFromList : appList) {
             if (appFromList.getAppId() == appId) {
                 return appFromList;
@@ -485,7 +486,7 @@ public class NvHTTP {
      * or even nothing at all! Look apps up by ID if at all possible
      * using the above function */
     public NvApp getAppByName(String appName) throws IOException, XmlPullParserException {
-        LinkedList<NvApp> appList = getAppList();
+        List<NvApp> appList = getAppList();
         for (NvApp appFromList : appList) {
             if (appFromList.getAppName().equalsIgnoreCase(appName)) {
                 return appFromList;
@@ -498,14 +499,14 @@ public class NvHTTP {
         return pm.pair(serverInfo, pin);
     }
 
-    public static LinkedList<NvApp> getAppListByReader(Reader r) throws XmlPullParserException, IOException {
+    public static List<NvApp> getAppListByReader(Reader r) throws XmlPullParserException, IOException {
         XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
         factory.setNamespaceAware(true);
         XmlPullParser xpp = factory.newPullParser();
 
         xpp.setInput(r);
         int eventType = xpp.getEventType();
-        LinkedList<NvApp> appList = new LinkedList<>();
+        List<NvApp> appList = new ArrayList<>();
         Stack<String> currentTag = new Stack<>();
         boolean rootTerminated = false;
 
@@ -517,7 +518,7 @@ public class NvHTTP {
                     }
                     currentTag.push(xpp.getName());
                     if ("App".equals(xpp.getName())) {
-                        appList.addLast(new NvApp());
+                        appList.add(new NvApp());
                     }
                     break;
                 case XmlPullParser.END_TAG:
@@ -527,7 +528,7 @@ public class NvHTTP {
                     }
                     break;
                 case XmlPullParser.TEXT:
-                    NvApp app = appList.getLast();
+                    NvApp app = appList.get(appList.size() - 1);
                     if ("AppTitle".equals(currentTag.peek())) {
                         app.setAppName(xpp.getText().trim());
                     } else if ("ID".equals(currentTag.peek())) {
@@ -562,14 +563,14 @@ public class NvHTTP {
         return openHttpConnectionToString(baseUrlHttps + "/applist?" + buildUniqueIdUuidString(), true);
     }
 
-    public LinkedList<NvApp> getAppList() throws IOException, XmlPullParserException {
+    public List<NvApp> getAppList() throws IOException, XmlPullParserException {
         if (verbose) {
             // Use the raw function so the app list is printed
             return getAppListByReader(new StringReader(getAppListRaw()));
         } else {
             ResponseBody resp = openHttpConnection(baseUrlHttps + "/applist?" + buildUniqueIdUuidString(),
                                                    true);
-            LinkedList<NvApp> appList = getAppListByReader(new InputStreamReader(resp.byteStream()));
+            List<NvApp> appList = getAppListByReader(new InputStreamReader(resp.byteStream()));
             resp.close();
             return appList;
         }

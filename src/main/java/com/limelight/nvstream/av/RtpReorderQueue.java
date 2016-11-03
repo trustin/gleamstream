@@ -1,7 +1,8 @@
 package com.limelight.nvstream.av;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
-import java.util.LinkedList;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +15,7 @@ public class RtpReorderQueue {
 
     private final int maxSize;
     private final int maxQueueTime;
-    private final LinkedList<RtpQueueEntry> queue;
+    private final Deque<RtpQueueEntry> queue;
 
     private short nextRtpSequenceNumber;
 
@@ -30,7 +31,7 @@ public class RtpReorderQueue {
     public RtpReorderQueue() {
         maxSize = 16;
         maxQueueTime = 40;
-        queue = new LinkedList<>();
+        queue = new ArrayDeque<>();
 
         oldestQueuedTime = Long.MAX_VALUE;
         nextRtpSequenceNumber = Short.MAX_VALUE;
@@ -39,7 +40,7 @@ public class RtpReorderQueue {
     public RtpReorderQueue(int maxSize, int maxQueueTime) {
         this.maxSize = maxSize;
         this.maxQueueTime = maxQueueTime;
-        queue = new LinkedList<>();
+        queue = new ArrayDeque<>();
 
         oldestQueuedTime = Long.MAX_VALUE;
         nextRtpSequenceNumber = Short.MAX_VALUE;

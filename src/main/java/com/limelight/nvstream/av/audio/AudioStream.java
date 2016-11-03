@@ -6,7 +6,8 @@ import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.DatagramChannel;
-import java.util.LinkedList;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +34,7 @@ public class AudioStream {
 
     private AudioDepacketizer depacketizer;
 
-    private final LinkedList<Thread> threads = new LinkedList<>();
+    private final List<Thread> threads = new ArrayList<>();
 
     private volatile boolean aborting;
 

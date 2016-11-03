@@ -306,12 +306,10 @@ public class MainWindow {
             handlePendingTasks();
 
             if (showOsd || !receivedFirstFrame) {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 nk.prepare();
                 Osd.INSTANCE.layout(nk, width, height);
                 nk.render();
             } else {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 glfwSetKeyCallback(window, this::onKey);
                 glfwPollEvents();
             }
@@ -420,6 +418,12 @@ public class MainWindow {
             final long currentTime = System.nanoTime();
             if (currentTime - lastGravePressTime < 1000000000L) {
                 showOsd = !showOsd;
+                if (showOsd) {
+                    Osd.INSTANCE.follow();
+                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                } else {
+                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                }
                 return;
             }
             lastGravePressTime = currentTime;
