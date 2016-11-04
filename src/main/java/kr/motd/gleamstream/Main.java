@@ -4,6 +4,7 @@ import static java.lang.System.exit;
 import static kr.motd.gleamstream.Panic.panic;
 
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 import org.lwjgl.system.Library;
 import org.slf4j.Logger;
@@ -137,38 +138,47 @@ public final class Main {
     }
 
     private void connect(Preferences prefs, boolean use1080p, boolean useLocalAudio) throws Exception {
-        final int width;
-        final int height;
-        if (use1080p) {
-            width = 1920;
-            height = 1080;
-        } else {
-            width = 1280;
-            height = 720;
-        }
+        final Thread thread = new Thread(() -> {
+            final int width;
+            final int height;
+            if (use1080p) {
+                width = 1920;
+                height = 1080;
+            } else {
+                width = 1280;
+                height = 720;
+            }
 
+            StreamConfiguration streamConfig = createConfiguration(
+                    width, height, useLocalAudio, Boolean.TRUE.equals(useHevc));
+
+            prefs.setResolution(Resolution.findRes(height, fps));
+            prefs.setBitrate(bitrateMbps);
+            prefs.setLocalAudio(useLocalAudio);
+
+            final NvConnection conn = new NvConnection(connectHost, prefs.getUniqueId(),
+                                                       new DefaultNvConnectionListener(),
+                                                       streamConfig, new DefaultCryptoProvider());
+            addShutdownHook(conn);
+
+            try {
+                conn.start(VideoDecoderRenderer.FLAG_PREFER_QUALITY,
+                           new OpenAlAudioRenderer(),
+                           new FFmpegVideoDecoderRenderer(MainWindow.INSTANCE, width, height));
+            } catch (UnknownHostException e) {
+                throw panic("Failed to connect to the server", e);
+            }
+
+            MainWindow.INSTANCE.setNvConnection(conn);
+            MainWindow.INSTANCE.setListener(new DefaultMainWindowListener(conn));
+            MainWindow.INSTANCE.setOsdVisibility(false);
+        });
+        thread.setName("NvConnection Starter");
+        thread.start();
+
+        // NB: GLFW event loop must be run on the main thread.
         Osd.INSTANCE.setProgress("Initializing");
-        MainWindow.INSTANCE.start().join();
-
-        StreamConfiguration streamConfig = createConfiguration(
-                width, height, useLocalAudio, Boolean.TRUE.equals(useHevc));
-
-        prefs.setResolution(Resolution.findRes(height, fps));
-        prefs.setBitrate(bitrateMbps);
-        prefs.setLocalAudio(useLocalAudio);
-
-        final NvConnection conn = new NvConnection(connectHost, prefs.getUniqueId(),
-                                                   new DefaultNvConnectionListener(),
-                                                   streamConfig, new DefaultCryptoProvider());
-        addShutdownHook(conn);
-
-        conn.start(VideoDecoderRenderer.FLAG_PREFER_QUALITY,
-                   new OpenAlAudioRenderer(),
-                   new FFmpegVideoDecoderRenderer(MainWindow.INSTANCE, width, height));
-
-        MainWindow.INSTANCE.setNvConnection(conn);
-        MainWindow.INSTANCE.setListener(new DefaultMainWindowListener(conn));
-        MainWindow.INSTANCE.setOsdVisibility(false);
+        MainWindow.INSTANCE.run();
     }
 
     private void pair(Preferences prefs) throws Exception {

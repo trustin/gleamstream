@@ -7,7 +7,8 @@ applicationDefaultJvmArgs = [
         '-server',
         '-Xmx512m',
         '-XX:+UseG1GC',
-        '-XX:+AggressiveOpts'
+        '-XX:+AggressiveOpts',
+        '-XstartOnFirstThread'
 ]
 
 ext.versionOf = { project.property("${it}.version") }

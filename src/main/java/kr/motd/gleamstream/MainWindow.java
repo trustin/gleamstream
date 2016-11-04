@@ -26,6 +26,7 @@ import static org.lwjgl.glfw.GLFW.glfwDefaultWindowHints;
 import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
 import static org.lwjgl.glfw.GLFW.glfwGetPrimaryMonitor;
 import static org.lwjgl.glfw.GLFW.glfwGetVideoMode;
+import static org.lwjgl.glfw.GLFW.glfwGetWindowSize;
 import static org.lwjgl.glfw.GLFW.glfwInit;
 import static org.lwjgl.glfw.GLFW.glfwMakeContextCurrent;
 import static org.lwjgl.glfw.GLFW.glfwPollEvents;
@@ -107,7 +108,6 @@ final class MainWindow {
 
     public static final MainWindow INSTANCE = new MainWindow();
 
-    private final CompletableFuture<?> startFuture = new CompletableFuture<>();
     private final Queue<FFmpegFrame> pendingFrames = new SpscArrayQueue<>(64);
     private final Queue<Runnable> pendingTasks = new MpscArrayQueue<>(64);
 
@@ -146,14 +146,6 @@ final class MainWindow {
         this.listener = listener;
     }
 
-    public CompletableFuture<?> start() {
-        Thread thread = new Thread(this::run);
-        thread.setName("Main Window");
-        thread.start();
-
-        return startFuture;
-    }
-
     public void setOsdVisibility(boolean visible) {
         pendingTasks.add(() -> setOsdVisibility(window, visible));
     }
@@ -172,10 +164,9 @@ final class MainWindow {
         pendingTasks.add(() -> glfwSetWindowShouldClose(window, true));
     }
 
-    private void run() {
+    public void run() {
         try {
             init();
-            startFuture.complete(null);
             loop();
         } finally {
             NativeGamepad.stop();
@@ -185,10 +176,6 @@ final class MainWindow {
                 stopFuture = nvConn.stop();
             } else {
                 stopFuture = CompletableFuture.completedFuture(null);
-            }
-
-            if (!startFuture.isDone()) {
-                startFuture.completeExceptionally(new IllegalStateException("Main window did not start"));
             }
 
             releaseLastFrame();
@@ -250,7 +237,12 @@ final class MainWindow {
 
         final int width = videoMode.width();
         final int height = videoMode.height();
-        window = glfwCreateWindow(width, height, "GleamStream", NULL, NULL);
+        if (Platform.get() != Platform.MACOSX) {
+            window = glfwCreateWindow(width, height, "GleamStream", NULL, NULL);
+        }  else {
+            // GLFW doesn't seem to support borderless fullscreen on OSX.
+            window = glfwCreateWindow(width, height, "GleamStream", primaryMonitor, NULL);
+        }
         if (window == NULL) {
             throw panic("Failed to create the main window");
         }
@@ -300,21 +292,24 @@ final class MainWindow {
             while (!glfwWindowShouldClose(window) && (nvConn == null || !nvConn.isStopped())) {
                 // Get the width and height of the frame buffer.
                 glfwGetFramebufferSize(window, widthBuf, heightBuf);
-                final int width = widthBuf.get(0);
-                final int height = heightBuf.get(0);
+                final int fbWidth = widthBuf.get(0);
+                final int fbHeight = heightBuf.get(0);
 
                 // Set the viewport and clear.
-                glViewport(0, 0, width, height);
+                glViewport(0, 0, fbWidth, fbHeight);
                 glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-                handlePendingFrames(width, height);
+                handlePendingFrames(fbWidth, fbHeight);
                 handlePendingTasks();
 
                 if (showOsd) {
+                    glfwGetWindowSize(window, widthBuf, heightBuf);
+                    final int width = widthBuf.get(0);
+                    final int height = heightBuf.get(0);
                     nk.prepare();
                     Osd.INSTANCE.layout(nk, width, height);
-                    nk.render();
+                    nk.render(width, height, fbWidth, fbHeight);
                 } else {
                     glfwSetKeyCallback(window, this::onKey);
                     glfwPollEvents();
@@ -327,11 +322,11 @@ final class MainWindow {
         }
     }
 
-    private void handlePendingFrames(int width, int height) {
+    private void handlePendingFrames(int fbWidth, int fbHeight) {
         final int numFrames = pendingFrames.size();
         if (numFrames == 0) {
             if (lastFrame != null) {
-                drawFrame(width, height, lastFrame);
+                drawFrame(fbWidth, fbHeight, lastFrame);
             }
             return;
         }
@@ -345,7 +340,7 @@ final class MainWindow {
 
         final FFmpegFrame e = pendingFrames.poll();
         releaseLastFrame();
-        drawFrame(width, height, e);
+        drawFrame(fbWidth, fbHeight, e);
 
         lastFrame = e;
     }
@@ -359,18 +354,18 @@ final class MainWindow {
 
     private void drawFrame(int fbWidth, int fbHeight, FFmpegFrame e) {
         final long renderStartTime = System.nanoTime();
-        final int sourceWidth = e.width();
-        final int sourceHeight = e.height();
+        final int streamWidth = e.width();
+        final int streamHeight = e.height();
         final int zoomedX;
         final int zoomedY;
         final int zoomedWidth;
         final int zoomedHeight;
-        if (sourceHeight * fbWidth > fbHeight * sourceWidth) {
-            zoomedWidth = sourceWidth * fbHeight / sourceHeight;
+        if (streamHeight * fbWidth > fbHeight * streamWidth) {
+            zoomedWidth = streamWidth * fbHeight / streamHeight;
             zoomedHeight = fbHeight;
         } else {
             zoomedWidth = fbWidth;
-            zoomedHeight = sourceHeight * fbWidth / sourceWidth;
+            zoomedHeight = streamHeight * fbWidth / streamWidth;
         }
         zoomedX = fbWidth - zoomedWidth >>> 1;
         zoomedY = fbHeight - zoomedHeight >>> 1;
@@ -378,9 +373,9 @@ final class MainWindow {
         glBindTexture(GL_TEXTURE_2D, frameTexture);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer);
 
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sourceWidth, sourceHeight,
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, streamWidth, streamHeight,
                         GL_BGRA, GL_UNSIGNED_BYTE, e.dataAddress());
-        glBlitFramebuffer(0, sourceHeight, sourceWidth, 0,
+        glBlitFramebuffer(0, streamHeight, streamWidth, 0,
                           zoomedX, zoomedY,
                           zoomedWidth + zoomedX, zoomedHeight + zoomedY, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);

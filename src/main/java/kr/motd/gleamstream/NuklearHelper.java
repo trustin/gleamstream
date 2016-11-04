@@ -32,7 +32,6 @@ import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_MIDDLE;
 import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_RIGHT;
 import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
 import static org.lwjgl.glfw.GLFW.glfwGetCursorPos;
-import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
 import static org.lwjgl.glfw.GLFW.glfwGetKey;
 import static org.lwjgl.glfw.GLFW.glfwGetWindowSize;
 import static org.lwjgl.glfw.GLFW.glfwPollEvents;
@@ -250,12 +249,7 @@ public final class NuklearHelper {
     private final NkBuffer cmds = NkBuffer.create();
     private final NkDrawNullTexture null_texture = NkDrawNullTexture.create();
 
-    private int width;
-    private int height;
-    private int display_width;
-    private int display_height;
     private int lineHeight;
-
     private int vbo, vao, ebo;
     private int prog;
     private int vert_shdr;
@@ -296,13 +290,7 @@ public final class NuklearHelper {
             IntBuffer h = stack.mallocInt(1);
 
             glfwGetWindowSize(win, w, h);
-            width = w.get(0);
-            height = h.get(0);
-
-            glfwGetFramebufferSize(win, w, h);
-            display_width = w.get(0);
-            display_height = h.get(0);
-            lineHeight = display_height / 20;
+            lineHeight = h.get(0) / 20;
         }
 
         int BITMAP_W = 2048;
@@ -649,7 +637,7 @@ public final class NuklearHelper {
         nk_input_scroll(ctx, (float) yoffset);
     }
 
-    public void render() {
+    public void render(int width, int height, int fbWidth, int fbHeight) {
         try (MemoryStack stack = stackPush()) {
             // setup global state
             glEnable(GL_BLEND);
@@ -711,8 +699,8 @@ public final class NuklearHelper {
             glUnmapBuffer(GL_ARRAY_BUFFER);
 
             // iterate over and execute each draw command
-            float fb_scale_x = (float) display_width / width;
-            float fb_scale_y = (float) display_height / height;
+            float fb_scale_x = (float) fbWidth / width;
+            float fb_scale_y = (float) fbHeight / height;
 
             long offset = NULL;
             for (NkDrawCommand cmd = nk__draw_begin(ctx, cmds);
