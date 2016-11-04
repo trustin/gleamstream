@@ -323,26 +323,53 @@ final class MainWindow {
     }
 
     private void handlePendingFrames(int fbWidth, int fbHeight) {
-        final int numFrames = pendingFrames.size();
-        if (numFrames == 0) {
-            if (lastFrame != null) {
-                drawFrame(fbWidth, fbHeight, lastFrame);
+        long currentTime = 0;
+        try {
+            final int numFrames = pendingFrames.size();
+            if (numFrames == 0) {
+                if (lastFrame != null) {
+                    drawFrame(fbWidth, fbHeight, lastFrame);
+                }
+                return;
             }
-            return;
-        }
 
-        if (numFrames > 2) {
-            for (int i = 1; i < numFrames; i++) {
-                pendingFrames.poll().release();
-                droppedFrameCounter++;
+            if (numFrames > 2) {
+                for (int i = 1; i < numFrames; i++) {
+                    pendingFrames.poll().release();
+                    droppedFrameCounter++;
+                }
+            }
+
+            final FFmpegFrame e = pendingFrames.poll();
+            releaseLastFrame();
+
+            final long renderStartTime = System.nanoTime();
+
+            drawFrame(fbWidth, fbHeight, e);
+            lastFrame = e;
+            frameCounter++;
+            currentTime = System.nanoTime();
+            renderTimeCounter += currentTime - renderStartTime;
+        } finally {
+            if (currentTime == 0) {
+                currentTime = System.nanoTime();
+            }
+            final long elapsedTime = currentTime - lastFpsCheckTime;
+            final long interval = 1000000000L; // 1 second
+            if (elapsedTime > interval) {
+                if (nvConn != null) {
+                    Osd.INSTANCE.setStatus(String.format(
+                            "fps: %2.2f, drops/s: %2.2f, ms/f: %2.2f",
+                            frameCounter * 1000000000.0 / elapsedTime,
+                            droppedFrameCounter * 1000000000.0 / elapsedTime,
+                            frameCounter != 0 ? renderTimeCounter / 1000000.0 / frameCounter : 0));
+                }
+                frameCounter = 0;
+                droppedFrameCounter = 0;
+                renderTimeCounter = 0;
+                lastFpsCheckTime = currentTime;
             }
         }
-
-        final FFmpegFrame e = pendingFrames.poll();
-        releaseLastFrame();
-        drawFrame(fbWidth, fbHeight, e);
-
-        lastFrame = e;
     }
 
     private void releaseLastFrame() {
@@ -353,7 +380,6 @@ final class MainWindow {
     }
 
     private void drawFrame(int fbWidth, int fbHeight, FFmpegFrame e) {
-        final long renderStartTime = System.nanoTime();
         final int streamWidth = e.width();
         final int streamHeight = e.height();
         final int zoomedX;
@@ -380,24 +406,6 @@ final class MainWindow {
                           zoomedWidth + zoomedX, zoomedHeight + zoomedY, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
-
-        final long currentTime = System.nanoTime();
-        final long elapsedTime = currentTime - lastFpsCheckTime;
-
-        frameCounter++;
-        renderTimeCounter += currentTime - renderStartTime;
-        final long interval = 1000000000L; // 1 second
-        if (elapsedTime > interval) {
-            Osd.INSTANCE.setStatus(String.format(
-                    "fps: %2.2f, drops/s: %2.2f, ms/f: %2.2f",
-                    frameCounter * 1000000000.0 / elapsedTime,
-                    droppedFrameCounter * 1000000000.0 / elapsedTime,
-                    renderTimeCounter / 1000000.0 / frameCounter));
-            frameCounter = 0;
-            droppedFrameCounter = 0;
-            renderTimeCounter = 0;
-            lastFpsCheckTime = currentTime;
-        }
     }
 
     private void handlePendingTasks() {
