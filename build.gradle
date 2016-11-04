@@ -7,8 +7,7 @@ applicationDefaultJvmArgs = [
         '-server',
         '-Xmx512m',
         '-XX:+UseG1GC',
-        '-XX:+AggressiveOpts',
-        '-XstartOnFirstThread'
+        '-XX:+AggressiveOpts'
 ]
 
 ext.versionOf = { project.property("${it}.version") }
@@ -93,3 +92,7 @@ run {
     }
 }
 
+startScripts {
+    unixStartScriptGenerator.template =
+            resources.text.fromFile("$project.projectDir/src/build/unixStartScript.txt")
+}
