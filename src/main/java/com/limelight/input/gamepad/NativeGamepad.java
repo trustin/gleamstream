@@ -7,6 +7,7 @@ public final class NativeGamepad {
     public static final int DEFAULT_DEVICE_POLLING_ITERATIONS = 400;
     public static final int DEFAULT_EVENT_POLLING_INTERVAL = 5;
 
+    private static boolean loadedNativeLibrary;
     private static boolean running;
     private static boolean initialized;
     private static Thread pollingThread;
@@ -17,6 +18,8 @@ public final class NativeGamepad {
     static {
         NativeLibraries.load("gamepad_jni");
     }
+
+    public static void initNativeLibraries() {}
 
     private static native void init();
 

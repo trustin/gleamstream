@@ -50,7 +50,9 @@ Press <kbd>ESC</kbd> key when on-screen display is on to quit.
 ```
 Usage: gleamstream [options]
   Options:
-    -app
+    -appid
+       The ID of the application to launch
+    -appname
        The name of the application to launch
        Default: Steam
     -bitrate
@@ -77,7 +79,7 @@ Usage: gleamstream [options]
 For example, I use the following command to start a Steam session:
 
 ```bash
-./gleamstream -connect 192.168.0.100 -res 1080 -fps 60 -bitrate 30 -app Steam
+./gleamstream -connect 192.168.0.100 -res 1080 -fps 60 -bitrate 30 -appname Steam
 ```
 
 To pair with the server, enter the following command and type the four-digit

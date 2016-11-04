@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 
 import com.limelight.utils.NativeLibraries;
 
-public class EnetConnection implements Closeable {
+public final class EnetConnection implements Closeable {
     private long enetPeer;
     private long enetClient;
 
@@ -14,11 +14,10 @@ public class EnetConnection implements Closeable {
 
     static {
         NativeLibraries.load("jnienet");
-
         initializeEnet();
     }
 
-    private EnetConnection() {}
+    public static void initNativeLibraries() {}
 
     public static EnetConnection connect(String host, int port, int timeout) throws IOException {
         EnetConnection conn = new EnetConnection();
@@ -113,4 +112,6 @@ public class EnetConnection implements Closeable {
     private static native void destroyClient(long client);
 
     private static native void disconnectPeer(long peer);
+
+    private EnetConnection() {}
 }

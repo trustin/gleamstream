@@ -32,7 +32,7 @@ public class NvApp {
             this.appId = Integer.parseInt(appId);
             initialized = true;
         } catch (NumberFormatException e) {
-            logger.warn("Malformed app ID: " + appId);
+            logger.warn("Malformed app ID: " + appId, e);
         }
     }
 

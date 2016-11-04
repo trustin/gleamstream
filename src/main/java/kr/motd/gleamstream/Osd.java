@@ -85,7 +85,7 @@ public final class Osd {
 
         synchronized (this) {
             progressText = this.progressText;
-            if (progressText != null && this.progressDotIdx > 0) {
+            if (progressText != null && this.progressDotIdx >= 0) {
                 final long currentTime = System.nanoTime();
                 if (lastProgressUpdateTime == 0) {
                     lastProgressUpdateTime = currentTime;

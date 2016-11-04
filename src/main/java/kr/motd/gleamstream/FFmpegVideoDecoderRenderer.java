@@ -49,6 +49,8 @@ final class FFmpegVideoDecoderRenderer extends VideoDecoderRenderer {
         avcodec_register_all();
     }
 
+    static void initNativeLibraries() {}
+
     private static final int DECODER_BUFFER_SIZE = 256 * 1024;
 
     private final MainWindow mainWindow;

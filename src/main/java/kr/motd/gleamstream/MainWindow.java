@@ -101,7 +101,7 @@ import com.limelight.nvstream.NvConnection;
 
 import kr.motd.gleamstream.FFmpegFramePool.FFmpegFrame;
 
-public class MainWindow {
+final class MainWindow {
 
     private static final Logger logger = LoggerFactory.getLogger(MainWindow.class);
 

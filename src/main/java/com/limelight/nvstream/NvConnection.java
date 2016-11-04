@@ -209,13 +209,12 @@ public class NvConnection {
 
         // If the client did not provide an exact app ID, do a lookup with the app list
         if (!context.streamConfig.getApp().isInitialized()) {
-            logger.info(
-                    "Using deprecated app lookup method - Please specify an app ID in your StreamConfiguration instead");
             app = h.getAppByName(context.streamConfig.getApp().getAppName());
             if (app == null) {
                 throw panic(
                         "The app " + context.streamConfig.getApp().getAppName() + " is not in GFE app list");
             }
+            logger.info("Please use '-appid {}' option instead of '-appname' for faster startup.", app.getAppId());
         }
 
         // If there's a game running, resume it
@@ -245,16 +244,16 @@ public class NvConnection {
                 }
             }
 
-            logger.info("Resumed existing game session");
+            logger.info("Resumed an existing session");
             return true;
         } else {
             return launchNotRunningApp(h, app);
         }
     }
 
-    protected boolean quitAndLaunch(NvHTTP h, NvApp app) throws IOException,
-                                                                XmlPullParserException {
+    protected boolean quitAndLaunch(NvHTTP h, NvApp app) throws IOException, XmlPullParserException {
         try {
+            logger.info("Quitting the previous session ..");
             if (!h.quitApp()) {
                 throw panic(
                         "Failed to quit previous session! You must quit it manually");
@@ -274,12 +273,13 @@ public class NvConnection {
 
     private boolean launchNotRunningApp(NvHTTP h, NvApp app)
             throws IOException, XmlPullParserException {
+        logger.info("Launching a new session ..");
         // Launch the app since it's not running
         if (!h.launchApp(context, app.getAppId())) {
             throw panic("Failed to launch application");
         }
 
-        logger.info("Launched new game session");
+        logger.info("Launched a new session");
 
         return true;
     }

@@ -5,6 +5,7 @@ import static kr.motd.gleamstream.Panic.panic;
 
 import java.net.InetAddress;
 
+import org.lwjgl.system.Library;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,10 +13,13 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.internal.Console;
+import com.limelight.input.gamepad.NativeGamepad;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
+import com.limelight.nvstream.av.audio.OpusDecoder;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
+import com.limelight.nvstream.enet.EnetConnection;
 import com.limelight.nvstream.http.CryptoProvider;
 import com.limelight.nvstream.http.DefaultCryptoProvider;
 import com.limelight.nvstream.http.NvApp;
@@ -34,6 +38,15 @@ public final class Main {
         Thread.setDefaultUncaughtExceptionHandler((thread, cause) -> {
             throw panic(cause);
         });
+
+        // Load all native libraries first so that GUI does not freeze later.
+        logger.info("Loading native libraries ..");
+        Library.initialize();
+        FFmpegVideoDecoderRenderer.initNativeLibraries();
+        NativeGamepad.initNativeLibraries();
+        OpusDecoder.initNativeLibraries();
+        EnetConnection.initNativeLibraries();
+        logger.info("Loaded all native libraries");
     }
 
     private final Console console = JCommander.getConsole();
@@ -67,8 +80,11 @@ public final class Main {
     @Parameter(names = "-localaudio", description = "Makes the audio stay in the server")
     private Boolean useLocalAudio;
 
-    @Parameter(names = "-app", description = "The name of the application to launch")
-    private String app = "Steam";
+    @Parameter(names = "-appname", description = "The name of the application to launch")
+    private String appName = "Steam";
+
+    @Parameter(names = "-appid", description = "The ID of the application to launch")
+    private Integer appId;
 
     @Parameter(names = { "-help", "-h" }, description = "Prints the usage", help = true)
     private Boolean help;
@@ -141,52 +157,9 @@ public final class Main {
         prefs.setBitrate(bitrateMbps);
         prefs.setLocalAudio(useLocalAudio);
 
-        NvConnectionListener connListener = new NvConnectionListener() {
-            @Override
-            public void stageStarting(Stage stage) {
-                final String message;
-                switch (stage) {
-                    case LAUNCH_APP:
-                        message = "Launching application";
-                        break;
-                    case RTSP_HANDSHAKE:
-                        message = "Handshaking RTSP session";
-                        break;
-                    case CONTROL_START:
-                        message = "Establishing control stream";
-                        break;
-                    case VIDEO_START:
-                        message = "Establishing video stream";
-                        break;
-                    case AUDIO_START:
-                        message = "Establishing audio stream";
-                        break;
-                    case INPUT_START:
-                        message = "Establishing input stream";
-                        break;
-                    default:
-                        return;
-                }
-
-                Osd.INSTANCE.setProgress(message);
-            }
-
-            @Override
-            public void stageComplete(Stage stage) {
-                Osd.INSTANCE.clear();
-            }
-
-            @Override
-            public void stageFailed(Stage stage) {
-                logger.error("Stage failed: {}", stage);
-                MainWindow.INSTANCE.destroy();
-            }
-        };
-
-        final NvConnection conn = new NvConnection(
-                connectHost, prefs.getUniqueId(), connListener, streamConfig,
-                new DefaultCryptoProvider());
-
+        final NvConnection conn = new NvConnection(connectHost, prefs.getUniqueId(),
+                                                   new DefaultNvConnectionListener(),
+                                                   streamConfig, new DefaultCryptoProvider());
         addShutdownHook(conn);
 
         conn.start(VideoDecoderRenderer.FLAG_PREFER_QUALITY,
@@ -243,8 +216,15 @@ public final class Main {
     private StreamConfiguration createConfiguration(
             int width, int height, boolean useLocalAudio, boolean useHevc) {
 
+        final NvApp app;
+        if (appId != null) {
+            app = new NvApp("", appId);
+        } else {
+            app = new NvApp(appName);
+        }
+
         final StreamConfiguration.Builder builder = new StreamConfiguration.Builder();
-        builder.setApp(new NvApp(app))
+        builder.setApp(app)
                .setResolution(width, height)
                .setRefreshRate(fps)
                .setBitrate(bitrateMbps * 1000)
@@ -270,5 +250,48 @@ public final class Main {
 
     public static void main(String[] args) throws Exception {
         new Main().run(args);
+    }
+
+    private static class DefaultNvConnectionListener implements NvConnectionListener {
+        @Override
+        public void stageStarting(Stage stage) {
+            final String message;
+            switch (stage) {
+                case LAUNCH_APP:
+                    message = "Launching application";
+                    break;
+                case RTSP_HANDSHAKE:
+                    message = "Handshaking RTSP session";
+                    break;
+                case CONTROL_START:
+                    message = "Establishing control stream";
+                    break;
+                case VIDEO_START:
+                    message = "Establishing video stream";
+                    break;
+                case AUDIO_START:
+                    message = "Establishing audio stream";
+                    break;
+                case INPUT_START:
+                    message = "Establishing input stream";
+                    break;
+                default:
+                    return;
+            }
+
+            Osd.INSTANCE.setProgress(message);
+            logger.info(message);
+        }
+
+        @Override
+        public void stageComplete(Stage stage) {
+            Osd.INSTANCE.clear();
+        }
+
+        @Override
+        public void stageFailed(Stage stage) {
+            logger.error("Stage failed: {}", stage);
+            MainWindow.INSTANCE.destroy();
+        }
     }
 }
