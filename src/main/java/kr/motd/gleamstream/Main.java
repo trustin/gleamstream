@@ -232,7 +232,9 @@ public final class Main {
     private void quit(Preferences prefs) throws Exception {
         final CryptoProvider crypto = new DefaultCryptoProvider();
         final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(quitHost), prefs.getUniqueId(), crypto);
+        console.println("Quitting the current session at " + quitHost + " ..");
         nvHttp.quitApp();
+        console.println("Done");
     }
 
     /*
