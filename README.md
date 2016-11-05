@@ -71,6 +71,8 @@ Usage: gleamstream [options]
        Makes the audio stay in the server
     -pair
        Pairs with the specified IP address or host (e.g. -p 192.168.0.100)
+    -quit
+       Quits the running application in the specified IP address or hostname
     -res
        The resolution of the video stream (must be 1080 or 720)
        Default: 1080
@@ -87,6 +89,12 @@ PIN on your server as instructed:
 
 ```bash
 ./gleamstream -pair 192.168.0.100
+```
+
+To terminate an existing session in the server, use the `-quit` command:
+
+```bash
+./gleamstream -quit 192.168.0.100
 ```
 
 ### How to build
