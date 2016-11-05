@@ -27,6 +27,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
@@ -197,41 +198,26 @@ public class DefaultCryptoProvider implements CryptoProvider {
 
     @Override
     public synchronized X509Certificate getClientCertificate() {
-        // Use a lock here to ensure only one guy will be generating or loading
-        // the certificate and key at a time
-        if (cert != null) {
-            return cert;
-        }
-
-        // No loaded cert yet, let's see if we have one on disk
-        if (loadCertKeyPair()) {
-            // Got one
-            return cert;
-        }
-
-        // Try to generate a new key pair
-        if (!generateCertKeyPair()) {
-            // Failed
-            return null;
-        }
-
-        // Load the generated pair
-        loadCertKeyPair();
-        return cert;
+        return lazyGet(() -> cert);
     }
 
     @Override
     public synchronized RSAPrivateKey getClientPrivateKey() {
+        return lazyGet(() -> key);
+    }
+
+    private <T> T lazyGet(Supplier<T> supplier) {
         // Use a lock here to ensure only one guy will be generating or loading
         // the certificate and key at a time
-        if (key != null) {
-            return key;
+        final T value = supplier.get();
+        if (value != null) {
+            return value;
         }
 
         // No loaded key yet, let's see if we have one on disk
         if (loadCertKeyPair()) {
             // Got one
-            return key;
+            return supplier.get();
         }
 
         // Try to generate a new key pair
@@ -242,7 +228,7 @@ public class DefaultCryptoProvider implements CryptoProvider {
 
         // Load the generated pair
         loadCertKeyPair();
-        return key;
+        return supplier.get();
     }
 
     @Override
