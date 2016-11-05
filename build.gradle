@@ -1,3 +1,5 @@
+import org.apache.tools.ant.taskdefs.condition.Os
+
 apply plugin: 'java'
 apply plugin: 'application'
 
@@ -89,6 +91,11 @@ tasks.withType(JavaCompile) {
 run {
     if (project.hasProperty('appArgs')) {
         args appArgs.split('[ \t]+')
+    }
+
+    jvmArgs applicationDefaultJvmArgs
+    if (Os.isFamily(Os.FAMILY_MAC)) {
+        jvmArgs '-XstartOnFirstThread'
     }
 }
 
