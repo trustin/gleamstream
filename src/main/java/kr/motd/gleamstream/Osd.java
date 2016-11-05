@@ -37,10 +37,14 @@ public final class Osd {
 
     private static final int MAX_LOG_LINES = 128;
     private static final String[] PROGRESS_DOTS = {
-            ".   ",
-            " .  ",
-            "  . ",
-            "   ."
+            ".       ",
+            " .      ",
+            "  .     ",
+            "   .    ",
+            "    .   ",
+            "     .  ",
+            "      . ",
+            "       ."
     };
 
     private final Deque<String> logLines = new ArrayDeque<>(MAX_LOG_LINES);
@@ -89,7 +93,7 @@ public final class Osd {
                 final long currentTime = System.nanoTime();
                 if (lastProgressUpdateTime == 0) {
                     lastProgressUpdateTime = currentTime;
-                } else if (currentTime - lastProgressUpdateTime > 1000000000) {
+                } else if (currentTime - lastProgressUpdateTime > 500000000) {
                     lastProgressUpdateTime = currentTime;
                     this.progressDotIdx = (this.progressDotIdx + 1) % PROGRESS_DOTS.length;
                 }
