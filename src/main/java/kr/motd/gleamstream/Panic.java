@@ -3,19 +3,33 @@ package kr.motd.gleamstream;
 import java.util.regex.Pattern;
 
 import org.lwjgl.util.tinyfd.TinyFileDialogs;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
 
 public final class Panic {
 
+    private static final Logger logger = LoggerFactory.getLogger(Panic.class);
     private static final Pattern TAB_PATTERN = Pattern.compile("\t", Pattern.LITERAL);
     private static final Pattern NEWLINE_PATTERN = Pattern.compile("\r?\n");
+
+    private static volatile boolean guiEnabled;
+
+    public static void enableGui() {
+        guiEnabled = true;
+    }
 
     public static RuntimeException panic(String message, Throwable cause) {
         MainWindow.INSTANCE.destroy();
 
-        TinyFileDialogs.tinyfd_messageBox("Error", toString(message, cause),
-                                          "ok", "error", true);
+        if (guiEnabled) {
+            TinyFileDialogs.tinyfd_messageBox("Error", toString(message, cause),
+                                              "ok", "error", true);
+        } else {
+            logger.error(message, cause);
+        }
+
         System.exit(1);
 
         return new RuntimeException("panic!") {

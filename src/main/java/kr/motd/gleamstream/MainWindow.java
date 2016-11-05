@@ -120,10 +120,12 @@ final class MainWindow {
     private long lastGravePressTime = System.nanoTime();
     private boolean showOsd = true;
 
-    private long lastFpsCheckTime = System.nanoTime();
-    private int droppedFrameCounter;
-    private int frameCounter;
-    private long renderTimeCounter;
+    private long lastStatUpdateTime = System.nanoTime();
+    private int osdFrameCounter;
+    private int streamFrameCounter;
+    private int droppedStreamFrameCounter;
+    private long osdRenderTime;
+    private long streamRenderTime;
 
     private volatile NvConnection nvConn;
     private volatile MainWindowListener listener;
@@ -304,16 +306,13 @@ final class MainWindow {
                 handlePendingTasks();
 
                 if (showOsd) {
-                    glfwGetWindowSize(window, widthBuf, heightBuf);
-                    final int width = widthBuf.get(0);
-                    final int height = heightBuf.get(0);
-                    nk.prepare();
-                    Osd.INSTANCE.layout(nk, width, height);
-                    nk.render(width, height, fbWidth, fbHeight);
+                    handleOsd(fbWidth, fbHeight, widthBuf, heightBuf);
                 } else {
                     glfwSetKeyCallback(window, this::onKey);
                     glfwPollEvents();
                 }
+
+                updateStats();
                 glfwSwapBuffers(window); // swap the color buffers
             }
         } finally {
@@ -323,53 +322,31 @@ final class MainWindow {
     }
 
     private void handlePendingFrames(int fbWidth, int fbHeight) {
-        long currentTime = 0;
-        try {
-            final int numFrames = pendingFrames.size();
-            if (numFrames == 0) {
-                if (lastFrame != null) {
-                    drawFrame(fbWidth, fbHeight, lastFrame);
-                }
-                return;
+        final int numFrames = pendingFrames.size();
+        if (numFrames == 0) {
+            if (lastFrame != null) {
+                drawFrame(fbWidth, fbHeight, lastFrame);
             }
+            return;
+        }
 
-            if (numFrames > 2) {
-                for (int i = 1; i < numFrames; i++) {
-                    pendingFrames.poll().release();
-                    droppedFrameCounter++;
-                }
-            }
-
-            final FFmpegFrame e = pendingFrames.poll();
-            releaseLastFrame();
-
-            final long renderStartTime = System.nanoTime();
-
-            drawFrame(fbWidth, fbHeight, e);
-            lastFrame = e;
-            frameCounter++;
-            currentTime = System.nanoTime();
-            renderTimeCounter += currentTime - renderStartTime;
-        } finally {
-            if (currentTime == 0) {
-                currentTime = System.nanoTime();
-            }
-            final long elapsedTime = currentTime - lastFpsCheckTime;
-            final long interval = 1000000000L; // 1 second
-            if (elapsedTime > interval) {
-                if (nvConn != null) {
-                    Osd.INSTANCE.setStatus(String.format(
-                            "fps: %2.2f, drops/s: %2.2f, ms/f: %2.2f",
-                            frameCounter * 1000000000.0 / elapsedTime,
-                            droppedFrameCounter * 1000000000.0 / elapsedTime,
-                            frameCounter != 0 ? renderTimeCounter / 1000000.0 / frameCounter : 0));
-                }
-                frameCounter = 0;
-                droppedFrameCounter = 0;
-                renderTimeCounter = 0;
-                lastFpsCheckTime = currentTime;
+        if (numFrames > 2) {
+            for (int i = 1; i < numFrames; i++) {
+                pendingFrames.poll().release();
+                droppedStreamFrameCounter++;
             }
         }
+
+        final FFmpegFrame e = pendingFrames.poll();
+        releaseLastFrame();
+
+        final long renderStartTime = System.nanoTime();
+
+        drawFrame(fbWidth, fbHeight, e);
+        lastFrame = e;
+        streamFrameCounter++;
+
+        streamRenderTime += System.nanoTime() - renderStartTime;
     }
 
     private void releaseLastFrame() {
@@ -415,6 +392,42 @@ final class MainWindow {
                 break;
             }
             task.run();
+        }
+    }
+
+    private void handleOsd(int fbWidth, int fbHeight, IntBuffer widthBuf, IntBuffer heightBuf) {
+        final long renderStartTime = System.nanoTime();
+
+        glfwGetWindowSize(window, widthBuf, heightBuf);
+        final int width = widthBuf.get(0);
+        final int height = heightBuf.get(0);
+        nk.prepare();
+        Osd.INSTANCE.layout(nk, width, height);
+        nk.render(width, height, fbWidth, fbHeight);
+
+        osdFrameCounter++;
+        osdRenderTime += System.nanoTime() - renderStartTime;
+    }
+
+    private void updateStats() {
+        final long currentTime = System.nanoTime();
+        final long elapsedTime = currentTime - lastStatUpdateTime;
+        if (elapsedTime > 2000000000) { // Update at every other second
+            if (nvConn != null) {
+                Osd.INSTANCE.setStatus(String.format(
+                        "Stream[fps: %2.2f, drops: %2.2f, ms/f: %2.2f] OSD[fps: %2.2f, ms/f: %2.2f]",
+                        streamFrameCounter * 1000000000.0 / elapsedTime,
+                        droppedStreamFrameCounter * 1000000000.0 / elapsedTime,
+                        streamFrameCounter != 0 ? streamRenderTime / 1000000.0 / streamFrameCounter : 0,
+                        osdFrameCounter * 1000000000.0 / elapsedTime,
+                        osdFrameCounter != 0 ? osdRenderTime / 1000000.0 / osdFrameCounter : 0));
+            }
+            streamFrameCounter = 0;
+            droppedStreamFrameCounter = 0;
+            streamRenderTime = 0;
+            osdFrameCounter = 0;
+            osdRenderTime = 0;
+            lastStatUpdateTime = currentTime;
         }
     }
 

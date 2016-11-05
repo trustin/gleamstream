@@ -54,13 +54,18 @@ public final class Main {
 
     @Parameter(
             names = "-connect",
-            description = "Connects to the specified IP address or host (e.g. -c 192.168.0.100)")
+            description = "Connects to the specified IP address or hostname (e.g. -c 192.168.0.100)")
     private String connectHost;
 
     @Parameter(
             names = "-pair",
-            description = "Pairs with the specified IP address or host (e.g. -p 192.168.0.100)")
+            description = "Pairs with the specified IP address or hostname (e.g. -p 192.168.0.100)")
     private String pairHost;
+
+    @Parameter(
+            names = "-quit",
+            description = "Quits the running application in the specified IP address or hostname")
+    private String quitHost;
 
     @Parameter(
             names = "-res",
@@ -105,11 +110,13 @@ public final class Main {
 
         if (args.length == 0) {
             help = true;
-        } else if (connectHost == null && pairHost == null) {
-            console.println("-connect or -pair must be specified.");
+        } else if (connectHost == null && pairHost == null && quitHost == null) {
+            console.println("-connect, -pair or -quit must be specified.");
             help = true;
-        } else if (connectHost != null && pairHost != null) {
-            console.println("-connect and -pair cannot be specified with each other.");
+        } else if (connectHost != null && pairHost != null ||
+                   connectHost != null && quitHost != null ||
+                   pairHost != null && quitHost != null) {
+            console.println("-connect, -pair and -quit cannot be specified with each other.");
             help = true;
         } else if (resolution != 1080 && resolution != 720) {
             console.println("The value of -res option must be 1080 or 720.");
@@ -132,8 +139,10 @@ public final class Main {
 
         if (connectHost != null) {
             connect(prefs, resolution != 720, Boolean.TRUE.equals(useLocalAudio));
-        } else {
+        } else if (pairHost != null) {
             pair(prefs);
+        } else {
+            quit(prefs);
         }
     }
 
@@ -179,6 +188,7 @@ public final class Main {
         // NB: GLFW event loop must be run on the main thread.
         Osd.INSTANCE.setProgress("Initializing");
         MainWindow.INSTANCE.run();
+        Panic.enableGui();
     }
 
     private void pair(Preferences prefs) throws Exception {
@@ -217,6 +227,12 @@ public final class Main {
                 console.println("Other device is pairing with " + pairHost + " already.");
                 break;
         }
+    }
+
+    private void quit(Preferences prefs) throws Exception {
+        final CryptoProvider crypto = new DefaultCryptoProvider();
+        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(quitHost), prefs.getUniqueId(), crypto);
+        nvHttp.quitApp();
     }
 
     /*
