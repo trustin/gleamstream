@@ -2,6 +2,7 @@ package kr.motd.gleamstream;
 
 import static kr.motd.gleamstream.Panic.panic;
 import static org.lwjgl.openal.AL.createCapabilities;
+import static org.lwjgl.openal.AL.setCurrentThread;
 import static org.lwjgl.openal.AL10.AL_BUFFERS_PROCESSED;
 import static org.lwjgl.openal.AL10.AL_FORMAT_STEREO16;
 import static org.lwjgl.openal.AL10.AL_GAIN;
@@ -16,6 +17,7 @@ import static org.lwjgl.openal.AL10.alGenSources;
 import static org.lwjgl.openal.AL10.alGetError;
 import static org.lwjgl.openal.AL10.alGetSourcei;
 import static org.lwjgl.openal.AL10.alGetString;
+import static org.lwjgl.openal.AL10.alListenerf;
 import static org.lwjgl.openal.AL10.alSourcePlay;
 import static org.lwjgl.openal.AL10.alSourceQueueBuffers;
 import static org.lwjgl.openal.AL10.alSourceUnqueueBuffers;
@@ -34,6 +36,7 @@ import java.nio.IntBuffer;
 
 import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALCCapabilities;
+import org.lwjgl.openal.ALCapabilities;
 import org.lwjgl.system.MemoryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +53,7 @@ public final class OpenAlAudioRenderer implements AudioRenderer {
     private boolean initialized;
     private long device;
     private long ctx;
+    private ALCapabilities alCaps;
     private int format;
     private int frequency;
     private int source;
@@ -76,6 +80,47 @@ public final class OpenAlAudioRenderer implements AudioRenderer {
         }
 
         frequency = sampleRate;
+
+        device = alcOpenDevice((ByteBuffer) null);
+        if (device == NULL) {
+            logger.warn("Failed to open a sound device: {}", alGetString(alGetError()));
+            return false;
+        }
+
+        logger.info("Using sound device: {}", alcGetString(device, ALC_DEFAULT_DEVICE_SPECIFIER));
+
+        ctx = alcCreateContext(device, (IntBuffer) null);
+        if (ctx == NULL) {
+            logger.warn("Failed to create a sound context: {}", alGetString(alGetError()));
+            destroy();
+            return false;
+        }
+
+        int alError;
+
+        final ALCCapabilities alcCaps = ALC.createCapabilities(device);
+        alcMakeContextCurrent(ctx);
+        alCaps = createCapabilities(alcCaps);
+        alError = alGetError();
+        if (alError != AL_NO_ERROR) {
+            logger.warn("Failed to set the current sound context: {}", alGetString(alError));
+            destroy();
+            return false;
+        }
+
+        source = alGenSources();
+        alError = alGetError();
+        if (alError != AL_NO_ERROR) {
+            logger.warn("Failed to generate a sound source: {}", alGetString(alError));
+            destroy();
+            return false;
+        }
+
+        alSourcef(source, AL_GAIN, 1.0f);
+        alListenerf(AL_GAIN, 1.0f);
+
+        directBuffer = MemoryUtil.memAlloc(8192);
+
         return true;
     }
 
@@ -87,9 +132,11 @@ public final class OpenAlAudioRenderer implements AudioRenderer {
      */
     @Override
     public void playDecodedAudio(byte[] pcmData, int offset, int length) {
-        if (!lazyInit()) {
+        if (device == NULL) {
             return;
         }
+
+        setCurrentThread(alCaps);
 
         final int buf;
         if (alGetSourcei(source, AL_BUFFERS_PROCESSED) != 0) {
@@ -118,58 +165,12 @@ public final class OpenAlAudioRenderer implements AudioRenderer {
         }
     }
 
-    private boolean lazyInit() {
-        if (initialized) {
-            return device != NULL;
-        }
-
-        initialized = true;
-        device = alcOpenDevice((ByteBuffer) null);
-        if (device == NULL) {
-            logger.warn("Failed to open a sound device: {}", alGetString(alGetError()));
-            return false;
-        }
-
-        logger.info("Using sound device: {}", alcGetString(device, ALC_DEFAULT_DEVICE_SPECIFIER));
-
-        ctx = alcCreateContext(device, (IntBuffer) null);
-        if (ctx == NULL) {
-            logger.warn("Failed to create a sound context: {}", alGetString(alGetError()));
-            destroy();
-            return false;
-        }
-
-        int alError;
-
-        final ALCCapabilities alcCaps = ALC.createCapabilities(device);
-        alcMakeContextCurrent(ctx);
-        createCapabilities(alcCaps);
-        alError = alGetError();
-        if (alError != AL_NO_ERROR) {
-            logger.warn("Failed to set the current sound context: {}", alGetString(alError));
-            destroy();
-            return false;
-        }
-
-        source = alGenSources();
-        alError = alGetError();
-        if (alError != AL_NO_ERROR) {
-            logger.warn("Failed to generate a sound source: {}", alGetString(alError));
-            destroy();
-            return false;
-        }
-
-        alSourcef(source, AL_GAIN, 1.0f);
-
-        directBuffer = MemoryUtil.memAlloc(8192);
-        return true;
-    }
-
     /**
      * Callback for when the stream session is closing and the audio renderer should stop.
      */
     @Override
     public void streamClosing() {
+        setCurrentThread(alCaps);
         boolean interrupted = false;
         try {
             while (alGetSourcei(source, AL_SOURCE_STATE) == AL_PLAYING) {
@@ -204,7 +205,6 @@ public final class OpenAlAudioRenderer implements AudioRenderer {
         }
 
         if (ctx != NULL) {
-            alcMakeContextCurrent(NULL);
             alcDestroyContext(ctx);
             ctx = NULL;
         }
