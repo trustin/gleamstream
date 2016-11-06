@@ -42,14 +42,14 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.limelight.settings.SettingsManager;
+import kr.motd.gleamstream.Preferences;
 
 public class DefaultCryptoProvider implements CryptoProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultCryptoProvider.class);
 
-    private final File certFile = new File(SettingsManager.SETTINGS_DIR + File.separator + "client.crt");
-    private final File keyFile = new File(SettingsManager.SETTINGS_DIR + File.separator + "client.key");
+    private final File certFile = new File(Preferences.SETTINGS_DIR + File.separator + "client.crt");
+    private final File keyFile = new File(Preferences.SETTINGS_DIR + File.separator + "client.key");
 
     private X509Certificate cert;
     private RSAPrivateKey key;

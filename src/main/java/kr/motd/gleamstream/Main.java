@@ -14,7 +14,6 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.internal.Console;
-import com.limelight.input.gamepad.NativeGamepad;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
@@ -27,9 +26,6 @@ import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.nvstream.http.PairingManager.PairState;
-import com.limelight.settings.PreferencesManager;
-import com.limelight.settings.PreferencesManager.Preferences;
-import com.limelight.settings.PreferencesManager.Preferences.Resolution;
 
 public final class Main {
 
@@ -40,14 +36,12 @@ public final class Main {
             throw panic(cause);
         });
 
-        // Load all native libraries first so that GUI does not freeze later.
-        logger.info("Loading native libraries ..");
+        // Load all native libraries.
+        logger.info("Loading native libraries");
         Library.initialize();
         FFmpegVideoDecoderRenderer.initNativeLibraries();
-        NativeGamepad.initNativeLibraries();
         OpusDecoder.initNativeLibraries();
         EnetConnection.initNativeLibraries();
-        logger.info("Loaded all native libraries");
     }
 
     private final Console console = JCommander.getConsole();
@@ -132,11 +126,7 @@ public final class Main {
             return;
         }
 
-        // TODO: Device name pattern matching + built-in gamepad mapping presets
-        Preferences prefs = PreferencesManager.getPreferences();
-        // Save preferences to preserve possibly new unique ID
-        PreferencesManager.writePreferences(prefs);
-
+        final Preferences prefs = new Preferences();
         if (connectHost != null) {
             connect(prefs, resolution != 720, Boolean.TRUE.equals(useLocalAudio));
         } else if (pairHost != null) {
@@ -147,6 +137,8 @@ public final class Main {
     }
 
     private void connect(Preferences prefs, boolean use1080p, boolean useLocalAudio) throws Exception {
+        final MainWindow window = new MainWindow(prefs.gamepadMappings());
+
         final Thread thread = new Thread(() -> {
             final int width;
             final int height;
@@ -161,39 +153,35 @@ public final class Main {
             StreamConfiguration streamConfig = createConfiguration(
                     width, height, useLocalAudio, Boolean.TRUE.equals(useHevc));
 
-            prefs.setResolution(Resolution.findRes(height, fps));
-            prefs.setBitrate(bitrateMbps);
-            prefs.setLocalAudio(useLocalAudio);
-
-            final NvConnection conn = new NvConnection(connectHost, prefs.getUniqueId(),
-                                                       new DefaultNvConnectionListener(),
+            final NvConnection conn = new NvConnection(connectHost, prefs.uniqueId(),
+                                                       new DefaultNvConnectionListener(window),
                                                        streamConfig, new DefaultCryptoProvider());
             addShutdownHook(conn);
 
             try {
                 conn.start(VideoDecoderRenderer.FLAG_PREFER_QUALITY,
                            new OpenAlAudioRenderer(),
-                           new FFmpegVideoDecoderRenderer(MainWindow.INSTANCE, width, height));
+                           new FFmpegVideoDecoderRenderer(window, width, height));
             } catch (UnknownHostException e) {
                 throw panic("Failed to connect to the server", e);
             }
 
-            MainWindow.INSTANCE.setNvConnection(conn);
-            MainWindow.INSTANCE.setListener(new DefaultMainWindowListener(conn));
-            MainWindow.INSTANCE.setOsdVisibility(false);
+            window.setNvConnection(conn);
+            window.setListener(new DefaultMainWindowListener(conn));
+            window.setOsdVisibility(false);
         });
         thread.setName("NvConnection Starter");
         thread.start();
 
         // NB: GLFW event loop must be run on the main thread.
-        Osd.INSTANCE.setProgress("Initializing");
-        MainWindow.INSTANCE.run();
+        window.osd().setProgress("Initializing");
+        window.run();
         Panic.enableGui();
     }
 
     private void pair(Preferences prefs) throws Exception {
         final CryptoProvider crypto = new DefaultCryptoProvider();
-        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(pairHost), prefs.getUniqueId(), crypto);
+        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(pairHost), prefs.uniqueId(), crypto);
         final String serverInfo = nvHttp.getServerInfo();
         if (nvHttp.getPairState(serverInfo) == PairState.PAIRED) {
             console.println("Paired already with " + pairHost);
@@ -231,7 +219,7 @@ public final class Main {
 
     private void quit(Preferences prefs) throws Exception {
         final CryptoProvider crypto = new DefaultCryptoProvider();
-        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(quitHost), prefs.getUniqueId(), crypto);
+        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(quitHost), prefs.uniqueId(), crypto);
         console.println("Quitting the current session at " + quitHost + " ..");
         nvHttp.quitApp();
         console.println("Done");
@@ -281,6 +269,13 @@ public final class Main {
     }
 
     private static class DefaultNvConnectionListener implements NvConnectionListener {
+
+        private final MainWindow window;
+
+        DefaultNvConnectionListener(MainWindow window) {
+            this.window = window;
+        }
+
         @Override
         public void stageStarting(Stage stage) {
             final String message;
@@ -307,19 +302,19 @@ public final class Main {
                     return;
             }
 
-            Osd.INSTANCE.setProgress(message);
+            window.osd().setProgress(message);
             logger.info(message);
         }
 
         @Override
         public void stageComplete(Stage stage) {
-            Osd.INSTANCE.clear();
+            window.osd().clear();
         }
 
         @Override
         public void stageFailed(Stage stage) {
             logger.error("Stage failed: {}", stage);
-            MainWindow.INSTANCE.destroy();
+            window.destroy();
         }
     }
 }

@@ -21,7 +21,10 @@ public final class Panic {
     }
 
     public static RuntimeException panic(String message, Throwable cause) {
-        MainWindow.INSTANCE.destroy();
+        final MainWindow window = MainWindow.current();
+        if (window != null) {
+            window.destroy();
+        }
 
         if (guiEnabled) {
             TinyFileDialogs.tinyfd_messageBox("Error", toString(message, cause),

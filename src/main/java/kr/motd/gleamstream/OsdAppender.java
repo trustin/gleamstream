@@ -18,7 +18,7 @@ public class OsdAppender extends UnsynchronizedAppenderBase<ILoggingEvent> {
         encoder.setPattern("%d{HH:mm:ss.SSS} [%thread] %-5level %msg%n");
         encoder.setContext(getContext());
         try {
-            encoder.init(Osd.INSTANCE.outputStream());
+            encoder.init(Osd.outputStream());
         } catch (IOException e) {
             throw panic("Failed to initialize the log encoder:", e);
         }

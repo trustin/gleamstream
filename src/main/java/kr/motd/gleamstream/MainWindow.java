@@ -2,20 +2,25 @@ package kr.motd.gleamstream;
 
 import static kr.motd.gleamstream.Panic.panic;
 import static org.lwjgl.glfw.GLFW.GLFW_BLUE_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_CONNECTED;
 import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MAJOR;
 import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MINOR;
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR;
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED;
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR_NORMAL;
 import static org.lwjgl.glfw.GLFW.GLFW_DECORATED;
+import static org.lwjgl.glfw.GLFW.GLFW_DISCONNECTED;
 import static org.lwjgl.glfw.GLFW.GLFW_FALSE;
 import static org.lwjgl.glfw.GLFW.GLFW_GREEN_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_JOYSTICK_1;
+import static org.lwjgl.glfw.GLFW.GLFW_JOYSTICK_LAST;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_GRAVE_ACCENT;
 import static org.lwjgl.glfw.GLFW.GLFW_MAXIMIZED;
 import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_CORE_PROFILE;
 import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_FORWARD_COMPAT;
 import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_PROFILE;
+import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
 import static org.lwjgl.glfw.GLFW.GLFW_RED_BITS;
 import static org.lwjgl.glfw.GLFW.GLFW_REFRESH_RATE;
 import static org.lwjgl.glfw.GLFW.GLFW_RELEASE;
@@ -24,10 +29,14 @@ import static org.lwjgl.glfw.GLFW.GLFW_VISIBLE;
 import static org.lwjgl.glfw.GLFW.glfwCreateWindow;
 import static org.lwjgl.glfw.GLFW.glfwDefaultWindowHints;
 import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
+import static org.lwjgl.glfw.GLFW.glfwGetJoystickAxes;
+import static org.lwjgl.glfw.GLFW.glfwGetJoystickButtons;
+import static org.lwjgl.glfw.GLFW.glfwGetJoystickName;
 import static org.lwjgl.glfw.GLFW.glfwGetPrimaryMonitor;
 import static org.lwjgl.glfw.GLFW.glfwGetVideoMode;
 import static org.lwjgl.glfw.GLFW.glfwGetWindowSize;
 import static org.lwjgl.glfw.GLFW.glfwInit;
+import static org.lwjgl.glfw.GLFW.glfwJoystickPresent;
 import static org.lwjgl.glfw.GLFW.glfwMakeContextCurrent;
 import static org.lwjgl.glfw.GLFW.glfwPollEvents;
 import static org.lwjgl.glfw.GLFW.glfwSetCharCallback;
@@ -81,6 +90,8 @@ import static org.lwjgl.opengl.GL30.glFramebufferTexture2D;
 import static org.lwjgl.opengl.GL30.glGenFramebuffers;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
+import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
@@ -96,30 +107,55 @@ import org.lwjgl.system.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.limelight.input.gamepad.GamepadHandler;
-import com.limelight.input.gamepad.NativeGamepad;
 import com.limelight.nvstream.NvConnection;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2ShortMap;
+import it.unimi.dsi.fastutil.ints.Int2ShortOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.ints.IntSet;
 import kr.motd.gleamstream.FFmpegFramePool.FFmpegFrame;
+import kr.motd.gleamstream.gamepad.GamepadInput;
+import kr.motd.gleamstream.gamepad.GamepadMapping;
+import kr.motd.gleamstream.gamepad.GamepadMappings;
+import kr.motd.gleamstream.gamepad.GamepadOutput;
 
 final class MainWindow {
 
+    private static final int NV_STICK_MAX = 0x7FFE;
+    private static final int NV_TRIGGER_MAX = 0xFF;
+
+    private static volatile MainWindow currentWindow;
+
+    static MainWindow current() {
+        return currentWindow;
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(MainWindow.class);
 
-    public static final MainWindow INSTANCE = new MainWindow();
-
-    private final Queue<FFmpegFrame> pendingFrames = new SpscArrayQueue<>(64);
     private final Queue<Runnable> pendingTasks = new MpscArrayQueue<>(64);
-
     private long window;
-    private NuklearHelper nk;
+
+    // Fields for gamepad input
+    private final GamepadMappings availableGamepadMappings;
+    private final Int2ObjectMap<GamepadMapping> attachedGamepads;
+    private final Int2ShortMap gamepadAssignments;
+    private final IntSet knownMissingGamepadMappings = new IntOpenHashSet();
+
+    // Fields for video stream
+    private final Queue<FFmpegFrame> pendingFrames = new SpscArrayQueue<>(64);
     private int frameTexture;
     private int frameBuffer;
     private FFmpegFrame lastFrame;
 
+    // Fields for OSD
+    private NuklearHelper nk;
+    private final Osd osd = new Osd();
     private long lastGravePressTime = System.nanoTime();
     private boolean showOsd = true;
 
+    // Fields for stats
     private long lastStatUpdateTime = System.nanoTime();
     private int osdFrameCounter;
     private int streamFrameCounter;
@@ -130,7 +166,13 @@ final class MainWindow {
     private volatile NvConnection nvConn;
     private volatile MainWindowListener listener;
 
-    private MainWindow() {}
+    MainWindow(GamepadMappings availableGamepadMappings) {
+        this.availableGamepadMappings = availableGamepadMappings;
+        attachedGamepads = new Int2ObjectOpenHashMap<>();
+        gamepadAssignments = new Int2ShortOpenHashMap();
+        gamepadAssignments.defaultReturnValue((short) -1);
+        currentWindow = this;
+    }
 
     public void addFrame(FFmpegFrame frame) {
         pendingFrames.add(frame);
@@ -138,14 +180,14 @@ final class MainWindow {
 
     public void setNvConnection(NvConnection nvConn) {
         this.nvConn = nvConn;
-
-        // TODO: Replace with GLFW's Joystick API.
-        final GamepadHandler gamepadHandler = new GamepadHandler(nvConn);
-        NativeGamepad.start(gamepadHandler);
     }
 
     public void setListener(MainWindowListener listener) {
         this.listener = listener;
+    }
+
+    public Osd osd() {
+        return osd;
     }
 
     public void setOsdVisibility(boolean visible) {
@@ -155,7 +197,7 @@ final class MainWindow {
     private void setOsdVisibility(long window, boolean visible) {
         showOsd = visible;
         if (visible) {
-            Osd.INSTANCE.follow();
+            osd.follow();
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         } else {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -171,8 +213,6 @@ final class MainWindow {
             init();
             loop();
         } finally {
-            NativeGamepad.stop();
-
             final Future<?> stopFuture;
             if (nvConn != null) {
                 stopFuture = nvConn.stop();
@@ -283,6 +323,19 @@ final class MainWindow {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
 
+        // Initialize the Joystick state
+        for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++) {
+            if (attachedGamepads.containsKey(i)) {
+                if (!glfwJoystickPresent(i)) {
+                    onJoystick(i, GLFW_DISCONNECTED);
+                }
+            } else {
+                if (glfwJoystickPresent(i)) {
+                    onJoystick(i, GLFW_CONNECTED);
+                }
+            }
+        }
+
         // Show the main window.
         glfwShowWindow(window);
     }
@@ -291,7 +344,15 @@ final class MainWindow {
         final IntBuffer widthBuf = MemoryUtil.memAllocInt(1);
         final IntBuffer heightBuf = MemoryUtil.memAllocInt(1);
         try {
-            while (!glfwWindowShouldClose(window) && (nvConn == null || !nvConn.isStopped())) {
+            while (!glfwWindowShouldClose(window)) {
+                final NvConnection nvConn = this.nvConn;
+                if (nvConn != null) {
+                    if (nvConn.isStopped()) {
+                        break;
+                    }
+                    handleGamepadInput(nvConn);
+                }
+
                 // Get the width and height of the frame buffer.
                 glfwGetFramebufferSize(window, widthBuf, heightBuf);
                 final int fbWidth = widthBuf.get(0);
@@ -319,6 +380,196 @@ final class MainWindow {
             MemoryUtil.memFree(widthBuf);
             MemoryUtil.memFree(heightBuf);
         }
+    }
+
+    private void handleGamepadInput(NvConnection nvConn) {
+        for (Int2ObjectMap.Entry<GamepadMapping> e : attachedGamepads.int2ObjectEntrySet()) {
+            final int jid = e.getIntKey();
+            final GamepadMapping mapping = e.getValue();
+            final ByteBuffer buttons = glfwGetJoystickButtons(jid);
+            if (buttons == null) {
+                continue;
+            }
+
+            short nvJid = gamepadAssignments.get(jid);
+            short buttonFlags = 0;
+            int leftStickX = 0;
+            int leftStickY = 0;
+            int rightStickX = 0;
+            int rightStickY = 0;
+            int leftTrigger = 0;
+            int rightTrigger = 0;
+
+            for (int i = 0; buttons.hasRemaining(); i++) {
+                if (buttons.get() == GLFW_PRESS) {
+                    final GamepadMapping.Entry mapped = mapping.mapButton(i);
+                    if (mapped == GamepadMapping.MISSING) {
+                        final int key = jid << 16 | i;
+                        if (!knownMissingGamepadMappings.contains(key)) {
+                            knownMissingGamepadMappings.add(key);
+                            logger.warn("Missing gamepad button mapping for {}: {}",
+                                        glfwGetJoystickName(jid), i);
+                        }
+                        continue;
+                    }
+
+                    switch (mapped.out()) {
+                        case LS_RIGHT:
+                        case LS_LEFT:
+                            leftStickX = (short) (mapped.in().outputEnd() * NV_STICK_MAX);
+                            break;
+                        case LS_UP:
+                        case LS_DOWN:
+                            leftStickY = (short) -(mapped.in().outputEnd() * NV_STICK_MAX);
+                            break;
+                        case RS_RIGHT:
+                        case RS_LEFT:
+                            rightStickX = (short) (mapped.in().outputEnd() * NV_STICK_MAX);
+                            break;
+                        case RS_UP:
+                        case RS_DOWN:
+                            rightStickY = (short) -(mapped.in().outputEnd() * NV_STICK_MAX);
+                            break;
+                        case LT:
+                            leftTrigger = (short) (mapped.in().outputEnd() * NV_TRIGGER_MAX);
+                            break;
+                        case RT:
+                            rightTrigger = (short) (mapped.in().outputEnd() * NV_TRIGGER_MAX);
+                            break;
+                        default:
+                            buttonFlags |= mapped.out().buttonFlag();
+                            break;
+                    }
+                }
+            }
+
+            if (nvJid < 0) {
+                // Assign the controller number on the first button press
+                // so that unused gamepads are not assigned.
+                if (buttonFlags != 0) {
+                    for (short i = 0; i < 4; i++) {
+                        if (!gamepadAssignments.containsValue(i)) {
+                            nvJid = i;
+                            gamepadAssignments.put(jid, i);
+                            logger.info("Gamepad {} ({}) assigned to {}",
+                                        jid, glfwGetJoystickName(jid), i);
+                            break;
+                        }
+                    }
+
+                    if (nvJid < 0) {
+                        logger.warn("Failed to assign the controller {} ({})", jid, glfwGetJoystickName(jid));
+                    }
+                }
+            }
+
+            if (nvJid < 0) {
+                continue;
+            }
+
+            final FloatBuffer axes = glfwGetJoystickAxes(jid);
+            if (axes == null) {
+                continue;
+            }
+
+            for (int i = 0; axes.hasRemaining(); i++) {
+                final float value = axes.get();
+                final GamepadMapping.Entry mapped = mapping.mapAxis(i, value);
+                if (mapped == GamepadMapping.MISSING) {
+                    final float absVal = Math.abs(value);
+                    if (absVal >= 0.5) {
+                        final int key = jid << 16 | (value >= 0 ? 0x0100 : 0x0200) | i;
+                        if (!knownMissingGamepadMappings.contains(key)) {
+                            knownMissingGamepadMappings.add(key);
+                            logger.warn("Missing gamepad axis mapping for {} ({}): {}{}{}",
+                                        jid, glfwGetJoystickName(jid), i, value > 0 ? "+" : "-", absVal);
+                        }
+                    }
+                    continue;
+                }
+
+                if (mapped == GamepadMapping.IGNORED) {
+                    continue;
+                }
+
+                final GamepadInput in = mapped.in();
+                final GamepadOutput out = mapped.out();
+                switch (out) {
+                    case LS_RIGHT:
+                    case LS_LEFT:
+                        leftStickX = getGamepadAxisValue(in, value, NV_STICK_MAX);
+                        break;
+                    case LS_UP:
+                    case LS_DOWN:
+                        leftStickY = -getGamepadAxisValue(in, value, NV_STICK_MAX);
+                        break;
+                    case RS_RIGHT:
+                    case RS_LEFT:
+                        rightStickX = getGamepadAxisValue(in, value, NV_STICK_MAX);
+                        break;
+                    case RS_UP:
+                    case RS_DOWN:
+                        rightStickY = -getGamepadAxisValue(in, value, NV_STICK_MAX);
+                        break;
+                    case LT:
+                        leftTrigger = getGamepadAxisValue(in, value, NV_TRIGGER_MAX);
+                        break;
+                    case RT:
+                        rightTrigger = getGamepadAxisValue(in, value, NV_TRIGGER_MAX);
+                        break;
+                    default:
+                        if (isGamepadButtonPressed(value)) {
+                            buttonFlags |= out.buttonFlag();
+                        }
+                        break;
+                }
+            }
+
+
+            // Apply dead zone.
+            final float leftStickScalar = (float) Math.sqrt((double) leftStickX * leftStickX +
+                                                            (double) leftStickY * leftStickY) / NV_STICK_MAX;
+            final float rightStickScalar = (float) Math.sqrt((double) leftStickX * leftStickX +
+                                                             (double) leftStickY * leftStickY) / NV_STICK_MAX;
+            if (leftStickScalar < mapping.leftStickDeadZone()) {
+                leftStickX = 0;
+                leftStickY = 0;
+            }
+            if (rightStickScalar < mapping.leftStickDeadZone()) {
+                rightStickX = 0;
+                rightStickY = 0;
+            }
+
+            nvConn.sendControllerInput(
+                    nvJid, buttonFlags, (byte) leftTrigger, (byte) rightTrigger,
+                    (short) leftStickX, (short) leftStickY, (short) rightStickX, (short) rightStickY);
+        }
+    }
+
+    private static boolean isGamepadButtonPressed(float value) {
+        return Math.abs(value) > 0.5f;
+    }
+
+    private static short getGamepadAxisValue(GamepadInput in, float value, int nvMax) {
+        final float start = in.start();
+        final float end = in.end();
+        final float outputStart = in.outputStart();
+        final float outputEnd = in.outputEnd();
+        final float scalar;
+        if (start < end) {
+            scalar = (value - start) / (end - start);
+        } else {
+            scalar = (start - value) / (start - end);
+        }
+
+        float outValue;
+        if (outputStart < outputEnd) {
+            outValue = (outputStart + (outputEnd - outputStart) * scalar) * nvMax;
+        } else {
+            outValue = (outputStart - (outputStart - outputEnd) * scalar) * nvMax;
+        }
+
+        return (short) Math.min(Math.max(outValue, -nvMax), nvMax);
     }
 
     private void handlePendingFrames(int fbWidth, int fbHeight) {
@@ -402,7 +653,7 @@ final class MainWindow {
         final int width = widthBuf.get(0);
         final int height = heightBuf.get(0);
         nk.prepare();
-        Osd.INSTANCE.layout(nk, width, height);
+        osd.layout(nk, width, height);
         nk.render(width, height, fbWidth, fbHeight);
 
         osdFrameCounter++;
@@ -414,7 +665,7 @@ final class MainWindow {
         final long elapsedTime = currentTime - lastStatUpdateTime;
         if (elapsedTime > 2000000000) { // Update at every other second
             if (nvConn != null) {
-                Osd.INSTANCE.setStatus(String.format(
+                osd.setStatus(String.format(
                         "Stream[fps: %2.2f, drops: %2.2f, ms/f: %2.2f] OSD[fps: %2.2f, ms/f: %2.2f]",
                         streamFrameCounter * 1000000000.0 / elapsedTime,
                         droppedStreamFrameCounter * 1000000000.0 / elapsedTime,
@@ -485,8 +736,18 @@ final class MainWindow {
     }
 
     private void onJoystick(int jid, int event) {
-        if (listener != null) {
-            listener.onJoystick(jid, event);
+        switch (event) {
+            case GLFW_CONNECTED:
+                final String name = glfwGetJoystickName(jid);
+                final GamepadMapping mapping = availableGamepadMappings.find(name);
+                attachedGamepads.put(jid, mapping);
+                logger.info("Gamepad {} ({}) attached; using mapping '{}'", jid, name, mapping.id());
+                break;
+            case GLFW_DISCONNECTED:
+                attachedGamepads.remove(jid);
+                gamepadAssignments.remove(jid);
+                logger.info("Gamepad {} detached", jid);
+                break;
         }
     }
 

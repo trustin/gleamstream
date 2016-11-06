@@ -38,6 +38,10 @@ dependencies {
     compile "com.google.code.gson:gson:${versionOf('gson')}"
     // Guava
     compile "com.google.guava:guava:${versionOf('guava')}"
+    // Jackson
+    [ 'jackson-core', 'jackson-annotations', 'jackson-databind' ].each {
+        compile "com.fasterxml.jackson.core:$it:${versionOf('jackson')}"
+    }
     // JavaCPP
     compile "org.bytedeco:javacpp:${versionOf('javacpp')}"
     // jCommander

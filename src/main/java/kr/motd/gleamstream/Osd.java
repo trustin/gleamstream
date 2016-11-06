@@ -33,9 +33,14 @@ import com.google.common.math.DoubleMath;
 
 public final class Osd {
 
-    public static final Osd INSTANCE = new Osd();
-
     private static final int MAX_LOG_LINES = 128;
+    private static final OutputStream outputStream = new LogLineOutputStream();
+    private static final Deque<String> logLines = new ArrayDeque<>(MAX_LOG_LINES);
+
+    public static OutputStream outputStream() {
+        return outputStream;
+    }
+
     private static final String[] PROGRESS_DOTS = {
             ".       ",
             " .      ",
@@ -47,19 +52,11 @@ public final class Osd {
             "       ."
     };
 
-    private final Deque<String> logLines = new ArrayDeque<>(MAX_LOG_LINES);
     private final String[] logLineArray = new String[MAX_LOG_LINES];
-    private final OutputStream outputStream = new LogLineOutputStream();
     private long lastProgressUpdateTime;
     private String progressText;
     private int progressDotIdx;
     private boolean wasFollowing = true;
-
-    private Osd() {}
-
-    public OutputStream outputStream() {
-        return outputStream;
-    }
 
     public synchronized void setProgress(String progressText) {
         assert progressText != null;
@@ -172,7 +169,7 @@ public final class Osd {
         nk_end(ctx);
     }
 
-    private final class LogLineOutputStream extends OutputStream {
+    private static final class LogLineOutputStream extends OutputStream {
 
         private final byte[] buf = new byte[1024];
         private int cnt;
