@@ -57,6 +57,11 @@ public final class Preferences {
         }
     }
 
+    private static final File uniqueIdFile = new File(SETTINGS_DIR + File.separator + "unique_id");
+    private static final File customGamepadMappingsFile =
+            new File(SETTINGS_DIR + File.separator + "gamepads.json");
+    private static final String defaultGamepadMappingsPath = "/gamepads.json";
+
     private final String uniqueId;
     private final GamepadMappings gamepadMappings;
 
@@ -64,7 +69,6 @@ public final class Preferences {
         logger.info("Loading preferences");
 
         // Load, generate and save the unique ID.
-        final File uniqueIdFile = new File(SETTINGS_DIR + File.separator + "unique_id");
         if (uniqueIdFile.exists() && uniqueIdFile.canRead()) {
             logger.info("Loading the unique ID of the machine");
             uniqueId = Files.readFirstLine(uniqueIdFile, StandardCharsets.US_ASCII);
@@ -75,22 +79,21 @@ public final class Preferences {
         }
 
         // Load the gamepad mappings.
-        final File customGamepadMappingFile =
-                new File(SETTINGS_DIR + File.separator + "gamepads.json");
-        if (customGamepadMappingFile.isFile() && customGamepadMappingFile.canRead()) {
-            logger.info("Loading gamepad mappings from: {}", customGamepadMappingFile);
-            gamepadMappings = GamepadMappings.load(new FileInputStream(customGamepadMappingFile));
+
+        if (customGamepadMappingsFile.isFile() && customGamepadMappingsFile.canRead()) {
+            logger.info("Loading gamepad mappings from: {}", customGamepadMappingsFile);
+            gamepadMappings = GamepadMappings.load(new FileInputStream(customGamepadMappingsFile));
         } else {
             logger.info("Loading the default gamepad mappings");
             gamepadMappings = GamepadMappings.load(
-                    Main.class.getResourceAsStream("/gamepad/default_mappings.json"));
+                    Main.class.getResourceAsStream(defaultGamepadMappingsPath));
         }
 
         final File exampleGamepadMappingFile =
                 new File(SETTINGS_DIR + File.separator + "gamepads.example.json");
         if (!exampleGamepadMappingFile.exists()) {
             try (OutputStream out = new FileOutputStream(exampleGamepadMappingFile)) {
-                ByteStreams.copy(Main.class.getResourceAsStream("/gamepad/default_mappings.json"), out);
+                ByteStreams.copy(Main.class.getResourceAsStream(defaultGamepadMappingsPath), out);
             } catch (Exception ignored) {}
         }
     }

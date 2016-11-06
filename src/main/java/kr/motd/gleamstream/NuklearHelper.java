@@ -259,7 +259,7 @@ public final class NuklearHelper {
 
     public NuklearHelper(long win) {
         this.win = win;
-        final URL fontUrl = NuklearHelper.class.getResource("/fonts/SourceSansPro-Regular.ttf");
+        final URL fontUrl = NuklearHelper.class.getResource("/SourceSansPro-Regular.ttf");
         final byte[] ttf;
         try {
             ttf = ByteStreams.toByteArray(fontUrl.openStream());
