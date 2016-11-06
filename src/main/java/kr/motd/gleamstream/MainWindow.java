@@ -400,8 +400,9 @@ final class MainWindow {
             int leftTrigger = 0;
             int rightTrigger = 0;
 
-            for (int i = 0; buttons.hasRemaining(); i++) {
-                if (buttons.get() == GLFW_PRESS) {
+            final int numButtons = buttons.remaining();
+            for (int i = 0; i < numButtons; i++) {
+                if (buttons.get(i) == GLFW_PRESS) {
                     final GamepadMapping.Entry mapped = mapping.mapButton(i);
                     if (mapped == GamepadMapping.MISSING) {
                         final int key = jid << 16 | i;
@@ -413,28 +414,40 @@ final class MainWindow {
                         continue;
                     }
 
+                    if (mapped == GamepadMapping.IGNORED) {
+                        continue;
+                    }
+
                     switch (mapped.out()) {
-                        case LS_RIGHT:
                         case LS_LEFT:
-                            leftStickX = (short) (mapped.in().outputEnd() * NV_STICK_MAX);
+                            leftStickX = -NV_STICK_MAX;
+                            break;
+                        case LS_RIGHT:
+                            leftStickX = NV_STICK_MAX;
+                            break;
+                        case LS_DOWN:
+                            leftStickY = -NV_STICK_MAX;
                             break;
                         case LS_UP:
-                        case LS_DOWN:
-                            leftStickY = (short) -(mapped.in().outputEnd() * NV_STICK_MAX);
+                            leftStickY = NV_STICK_MAX;
+                            break;
+                        case RS_LEFT:
+                            rightStickX = -NV_STICK_MAX;
                             break;
                         case RS_RIGHT:
-                        case RS_LEFT:
-                            rightStickX = (short) (mapped.in().outputEnd() * NV_STICK_MAX);
+                            rightStickX = NV_STICK_MAX;
+                            break;
+                        case RS_DOWN:
+                            rightStickY = -NV_STICK_MAX;
                             break;
                         case RS_UP:
-                        case RS_DOWN:
-                            rightStickY = (short) -(mapped.in().outputEnd() * NV_STICK_MAX);
+                            rightStickY = NV_STICK_MAX;
                             break;
                         case LT:
-                            leftTrigger = (short) (mapped.in().outputEnd() * NV_TRIGGER_MAX);
+                            leftTrigger = NV_TRIGGER_MAX;
                             break;
                         case RT:
-                            rightTrigger = (short) (mapped.in().outputEnd() * NV_TRIGGER_MAX);
+                            rightTrigger = NV_TRIGGER_MAX;
                             break;
                         default:
                             buttonFlags |= mapped.out().buttonFlag();
@@ -472,8 +485,9 @@ final class MainWindow {
                 continue;
             }
 
-            for (int i = 0; axes.hasRemaining(); i++) {
-                final float value = axes.get();
+            final int numAxes = axes.remaining();
+            for (int i = 0; i < numAxes; i++) {
+                final float value = axes.get(i);
                 final GamepadMapping.Entry mapped = mapping.mapAxis(i, value);
                 if (mapped == GamepadMapping.MISSING) {
                     final float absVal = Math.abs(value);
@@ -495,27 +509,27 @@ final class MainWindow {
                 final GamepadInput in = mapped.in();
                 final GamepadOutput out = mapped.out();
                 switch (out) {
-                    case LS_RIGHT:
                     case LS_LEFT:
-                        leftStickX = getGamepadAxisValue(in, value, NV_STICK_MAX);
+                    case LS_RIGHT:
+                        leftStickX = getGamepadStickValue(in, value);
                         break;
-                    case LS_UP:
                     case LS_DOWN:
-                        leftStickY = -getGamepadAxisValue(in, value, NV_STICK_MAX);
+                    case LS_UP:
+                        leftStickY = getGamepadStickValue(in, value);
                         break;
-                    case RS_RIGHT:
                     case RS_LEFT:
-                        rightStickX = getGamepadAxisValue(in, value, NV_STICK_MAX);
+                    case RS_RIGHT:
+                        rightStickX = getGamepadStickValue(in, value);
                         break;
-                    case RS_UP:
                     case RS_DOWN:
-                        rightStickY = -getGamepadAxisValue(in, value, NV_STICK_MAX);
+                    case RS_UP:
+                        rightStickY = getGamepadStickValue(in, value);
                         break;
                     case LT:
-                        leftTrigger = getGamepadAxisValue(in, value, NV_TRIGGER_MAX);
+                        leftTrigger = getGamepadTriggerValue(in, value);
                         break;
                     case RT:
-                        rightTrigger = getGamepadAxisValue(in, value, NV_TRIGGER_MAX);
+                        rightTrigger = getGamepadTriggerValue(in, value);
                         break;
                     default:
                         if (isGamepadButtonPressed(value)) {
@@ -525,17 +539,16 @@ final class MainWindow {
                 }
             }
 
-
             // Apply dead zone.
             final float leftStickScalar = (float) Math.sqrt((double) leftStickX * leftStickX +
                                                             (double) leftStickY * leftStickY) / NV_STICK_MAX;
-            final float rightStickScalar = (float) Math.sqrt((double) leftStickX * leftStickX +
-                                                             (double) leftStickY * leftStickY) / NV_STICK_MAX;
+            final float rightStickScalar = (float) Math.sqrt((double) rightStickX * rightStickX +
+                                                             (double) rightStickY * rightStickY) / NV_STICK_MAX;
             if (leftStickScalar < mapping.leftStickDeadZone()) {
                 leftStickX = 0;
                 leftStickY = 0;
             }
-            if (rightStickScalar < mapping.leftStickDeadZone()) {
+            if (rightStickScalar < mapping.rightStickDeadZone()) {
                 rightStickX = 0;
                 rightStickY = 0;
             }
@@ -550,7 +563,15 @@ final class MainWindow {
         return Math.abs(value) > 0.5f;
     }
 
-    private static short getGamepadAxisValue(GamepadInput in, float value, int nvMax) {
+    private static short getGamepadStickValue(GamepadInput in, float value) {
+        return (short) (Math.min(Math.max(getGamepadAxisValue(in, value), -1.0), 1.0) * NV_STICK_MAX);
+    }
+
+    private static short getGamepadTriggerValue(GamepadInput in, float value) {
+        return (short) (Math.min(Math.max(getGamepadAxisValue(in, value), 0), 1.0) * NV_TRIGGER_MAX);
+    }
+
+    private static float getGamepadAxisValue(GamepadInput in, float value) {
         final float start = in.start();
         final float end = in.end();
         final float outputStart = in.outputStart();
@@ -564,12 +585,12 @@ final class MainWindow {
 
         float outValue;
         if (outputStart < outputEnd) {
-            outValue = (outputStart + (outputEnd - outputStart) * scalar) * nvMax;
+            outValue = outputStart + (outputEnd - outputStart) * scalar;
         } else {
-            outValue = (outputStart - (outputStart - outputEnd) * scalar) * nvMax;
+            outValue = outputStart - (outputStart - outputEnd) * scalar;
         }
 
-        return (short) Math.min(Math.max(outValue, -nvMax), nvMax);
+        return outValue;
     }
 
     private void handlePendingFrames(int fbWidth, int fbHeight) {
@@ -606,7 +627,6 @@ final class MainWindow {
             lastFrame = null;
         }
     }
-
     private void drawFrame(int fbWidth, int fbHeight, FFmpegFrame e) {
         final int streamWidth = e.width();
         final int streamHeight = e.height();

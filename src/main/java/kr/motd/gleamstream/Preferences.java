@@ -79,7 +79,6 @@ public final class Preferences {
         }
 
         // Load the gamepad mappings.
-
         if (customGamepadMappingsFile.isFile() && customGamepadMappingsFile.canRead()) {
             logger.info("Loading gamepad mappings from: {}", customGamepadMappingsFile);
             gamepadMappings = GamepadMappings.load(new FileInputStream(customGamepadMappingsFile));
@@ -89,13 +88,12 @@ public final class Preferences {
                     Main.class.getResourceAsStream(defaultGamepadMappingsPath));
         }
 
+        // Generate the example mappings, which is actually the default.
         final File exampleGamepadMappingFile =
                 new File(SETTINGS_DIR + File.separator + "gamepads.example.json");
-        if (!exampleGamepadMappingFile.exists()) {
-            try (OutputStream out = new FileOutputStream(exampleGamepadMappingFile)) {
-                ByteStreams.copy(Main.class.getResourceAsStream(defaultGamepadMappingsPath), out);
-            } catch (Exception ignored) {}
-        }
+        try (OutputStream out = new FileOutputStream(exampleGamepadMappingFile)) {
+            ByteStreams.copy(Main.class.getResourceAsStream(defaultGamepadMappingsPath), out);
+        } catch (Exception ignored) {}
     }
 
     public String uniqueId() {

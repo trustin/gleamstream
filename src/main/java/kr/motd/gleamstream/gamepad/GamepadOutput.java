@@ -21,10 +21,10 @@ import static com.limelight.nvstream.input.ControllerPacket.Y_FLAG;
  * @author Diego Waxemberg
  */
 public enum GamepadOutput {
-    A(A_FLAG), X(X_FLAG), Y(Y_FLAG), B(B_FLAG),
+    A(A_FLAG), B(B_FLAG), X(X_FLAG), Y(Y_FLAG),
     DPAD_UP(UP_FLAG), DPAD_DOWN(DOWN_FLAG), DPAD_LEFT(LEFT_FLAG), DPAD_RIGHT(RIGHT_FLAG),
-    LS_RIGHT, LS_LEFT, LS_UP, LS_DOWN,
-    RS_RIGHT, RS_LEFT, RS_UP, RS_DOWN,
+    LS_LEFT, LS_RIGHT, LS_DOWN, LS_UP,
+    RS_LEFT, RS_RIGHT, RS_DOWN, RS_UP,
     LS_THUMB(LS_CLK_FLAG), RS_THUMB(RS_CLK_FLAG),
     LT, RT, LB(LB_FLAG), RB(RB_FLAG),
     START(PLAY_FLAG), BACK(BACK_FLAG), SPECIAL(SPECIAL_BUTTON_FLAG);
@@ -40,14 +40,7 @@ public enum GamepadOutput {
     }
 
     public short buttonFlag() {
+        assert buttonFlag != 0;
         return buttonFlag;
-    }
-
-    /**
-     * Checks if this component is analog or digital
-     * @return whether this component is analog
-     */
-    public boolean isAxis() {
-        return buttonFlag == 0;
     }
 }
