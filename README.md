@@ -97,6 +97,35 @@ To terminate an existing session in the server, use the `-quit` command:
 ./gleamstream -quit 192.168.0.100
 ```
 
+### Configuration files
+
+The configuration files are stored in your operating system's standard location for application settings:
+
+- Linux - `~/.config/gleamstream` or `$XDG_CONFIG_HOME/gleamstream`
+- MacOS X - `~/Library/Application Support/gleamstream`
+- Windows - `C:\Users\<username>\AppData\Roaming\gleamstream` or `%APPDATA%\gleamstream`
+
+You will find the following files:
+
+- `client.crt` and `client.key` - Client certificate and private key used for authentication with a GameStream server
+- `unique_id` - Contains a unique ID used when communicating with a GameStream server
+- `gamepad.example.json` - Example gamepad input mappings. See the '[Gamepad support](#gamepad-support)' section below.
+
+### Gamepad support
+
+GleamStream has built-in gamepad mappings for Xbox 360 and DualShock 4 controllers. If you have any of them, just connecting
+your gamepad to your machine and pressing a button should be all you need to do for playing with a gamepad.
+
+The default mappings are copied to `~/.config/gleamstream/gamepads.example.json` as an example. You may want to copy it to
+`~/.config/gleamstream/gamepads.json` and modify an existing one or add a new one.
+
+I must admit I can't test all O/S and controller combinations and there's always a chance where the built-in mappings do not
+work as expected. Please feel free to [create an issue](https://github.com/trustin/gleamstream/issues/new) or send a pull
+request to fix the built-in mappings or to add a new one.
+
+See [`src/main/resources/gamepads.json`](https://github.com/trustin/gleamstream/blob/master/src/main/resources/gamepads.json)
+for the built-in mappings.
+
 ### How to build
 
 ```bash
