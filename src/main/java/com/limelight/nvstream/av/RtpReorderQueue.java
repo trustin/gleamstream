@@ -7,7 +7,7 @@ import java.util.Iterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.limelight.utils.TimeHelper;
+import com.limelight.nvstream.TimeHelper;
 
 public class RtpReorderQueue {
 

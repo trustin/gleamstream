@@ -14,10 +14,10 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
+import com.limelight.nvstream.TimeHelper;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.enet.EnetConnection;
-import com.limelight.utils.TimeHelper;
 
 public class ControlStream implements ConnectionStatusListener, InputPacketSender {
 

@@ -4,7 +4,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import com.limelight.utils.NativeLibraries;
+import com.limelight.nvstream.NativeLibraries;
 
 public final class EnetConnection implements Closeable {
     private long enetPeer;

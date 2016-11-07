@@ -1,4 +1,4 @@
-package com.limelight.utils;
+package com.limelight.nvstream;
 
 import java.io.FileOutputStream;
 import java.io.IOException;

@@ -1,6 +1,6 @@
 package com.limelight.nvstream.av.audio;
 
-import com.limelight.utils.NativeLibraries;
+import com.limelight.nvstream.NativeLibraries;
 
 public final class OpusDecoder {
     static {
