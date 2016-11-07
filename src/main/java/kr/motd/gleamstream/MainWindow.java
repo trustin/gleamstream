@@ -1,5 +1,9 @@
 package kr.motd.gleamstream;
 
+import static com.limelight.nvstream.input.ControllerPacket.BACK_FLAG;
+import static com.limelight.nvstream.input.ControllerPacket.PLAY_FLAG;
+import static com.limelight.nvstream.input.ControllerPacket.SPECIAL_BUTTON_FLAG;
+import static com.limelight.nvstream.input.ControllerPacket.Y_FLAG;
 import static kr.motd.gleamstream.Panic.panic;
 import static org.lwjgl.glfw.GLFW.GLFW_BLUE_BITS;
 import static org.lwjgl.glfw.GLFW.GLFW_CONNECTED;
@@ -562,17 +566,29 @@ final class MainWindow {
                     nvJid, buttonFlags, (byte) leftTrigger, (byte) rightTrigger,
                     (short) leftStickX, (short) leftStickY, (short) rightStickX, (short) rightStickY);
 
-            // Toggle OSD when SPECIAL+Y or BACK+Y is pressed on the first gamepad.
             if (nvJid == 0) {
-                final short specialFlag = GamepadOutput.SPECIAL.buttonFlag();
-                final short backFlag = GamepadOutput.BACK.buttonFlag();
-                final short yFlag = GamepadOutput.Y.buttonFlag();
-                if (buttonFlags == (specialFlag | yFlag) &&
-                    (lastGamepadButtonFlags == 0 || lastGamepadButtonFlags == specialFlag) ||
-                    buttonFlags == (backFlag | yFlag) &&
-                    (lastGamepadButtonFlags == 0 || lastGamepadButtonFlags == backFlag)) {
+                // Quit when OSD is visible and BACK+START is pressed on the first gamepad.
+                if (showOsd) {
+                    if (buttonFlags == (BACK_FLAG | PLAY_FLAG) &&
+                        (lastGamepadButtonFlags == 0 ||
+                         lastGamepadButtonFlags == BACK_FLAG ||
+                         lastGamepadButtonFlags == PLAY_FLAG)) {
+
+                        glfwSetWindowShouldClose(window, true);
+                    }
+                }
+
+                // Toggle OSD when SPECIAL+Y or BACK+Y is pressed on the first gamepad.
+                if (buttonFlags == (SPECIAL_BUTTON_FLAG | Y_FLAG) &&
+                    (lastGamepadButtonFlags == 0 ||
+                     lastGamepadButtonFlags == SPECIAL_BUTTON_FLAG) ||
+                    buttonFlags == (BACK_FLAG | Y_FLAG) &&
+                    (lastGamepadButtonFlags == 0 ||
+                     lastGamepadButtonFlags == BACK_FLAG)) {
+
                     setOsdVisibility(window, !showOsd);
                 }
+
                 lastGamepadButtonFlags = buttonFlags;
             }
         }
