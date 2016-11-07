@@ -150,6 +150,7 @@ final class MainWindow {
     private final Int2ObjectMap<GamepadMapping> attachedGamepads;
     private final Int2ShortMap gamepadAssignments;
     private final IntSet knownMissingGamepadMappings = new IntOpenHashSet();
+    private short lastGamepadButtonFlags;
 
     // Fields for mouse cursor position
     private double lastCursorXpos;
@@ -560,6 +561,20 @@ final class MainWindow {
             nvConn.sendControllerInput(
                     nvJid, buttonFlags, (byte) leftTrigger, (byte) rightTrigger,
                     (short) leftStickX, (short) leftStickY, (short) rightStickX, (short) rightStickY);
+
+            // Toggle OSD when SPECIAL+Y or BACK+Y is pressed on the first gamepad.
+            if (nvJid == 0) {
+                final short specialFlag = GamepadOutput.SPECIAL.buttonFlag();
+                final short backFlag = GamepadOutput.BACK.buttonFlag();
+                final short yFlag = GamepadOutput.Y.buttonFlag();
+                if (buttonFlags == (specialFlag | yFlag) &&
+                    (lastGamepadButtonFlags == 0 || lastGamepadButtonFlags == specialFlag) ||
+                    buttonFlags == (backFlag | yFlag) &&
+                    (lastGamepadButtonFlags == 0 || lastGamepadButtonFlags == backFlag)) {
+                    setOsdVisibility(window, !showOsd);
+                }
+                lastGamepadButtonFlags = buttonFlags;
+            }
         }
     }
 
