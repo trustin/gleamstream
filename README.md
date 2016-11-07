@@ -40,10 +40,15 @@ Like Moonlight, GleamStream is licensed under
 
 ### GUI usage
 
-Press <kbd>`</kbd> key (backquote) twice within 1 second to toggle the on-screen display
-that shows the recent log messages and FPS.
+To toggle the on-screen display that shows the recent log messages and FPS:
 
-Press <kbd>ESC</kbd> key when on-screen display is on to quit.
+- Keyboard - Press <kbd>`</kbd> (backquote) twice within 1 second.
+- Gamepad - Press <kbd>Guide</kbd> + <kbd>Y</kbd> or <kbd>Back</kbd> + <kbd>Y</kbd>
+
+To quit, when on-screen display is on:
+
+- Keyboard - Press <kbd>ESC</kbd>
+- Gamepad - Press <kbd>Back</kbd> + <kbd>Start</kbd>
 
 ### Command-line usage
 
