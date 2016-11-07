@@ -355,12 +355,11 @@ final class MainWindow {
         try {
             while (!glfwWindowShouldClose(window)) {
                 final NvConnection nvConn = this.nvConn;
-                if (nvConn != null) {
-                    if (nvConn.isStopped()) {
-                        break;
-                    }
-                    handleGamepadInput(nvConn);
+                if (nvConn != null && nvConn.isStopped()) {
+                    break;
                 }
+
+                handleGamepadInput(nvConn);
 
                 // Get the width and height of the frame buffer.
                 glfwGetFramebufferSize(window, widthBuf, heightBuf);
@@ -562,9 +561,11 @@ final class MainWindow {
                 rightStickY = 0;
             }
 
-            nvConn.sendControllerInput(
-                    nvJid, buttonFlags, (byte) leftTrigger, (byte) rightTrigger,
-                    (short) leftStickX, (short) leftStickY, (short) rightStickX, (short) rightStickY);
+            if (nvConn != null) {
+                nvConn.sendControllerInput(
+                        nvJid, buttonFlags, (byte) leftTrigger, (byte) rightTrigger,
+                        (short) leftStickX, (short) leftStickY, (short) rightStickX, (short) rightStickY);
+            }
 
             if (nvJid == 0) {
                 // Quit when OSD is visible and BACK+START is pressed on the first gamepad.
