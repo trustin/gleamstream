@@ -108,21 +108,10 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_WORLD_2;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_X;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_Y;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_Z;
-import static org.lwjgl.glfw.GLFW.GLFW_MOD_ALT;
-import static org.lwjgl.glfw.GLFW.GLFW_MOD_CONTROL;
-import static org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT;
-import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_MIDDLE;
-import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_RIGHT;
-import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
-import static org.lwjgl.glfw.GLFW.GLFW_REPEAT;
 
 import java.awt.event.KeyEvent;
 
-import com.limelight.nvstream.NvConnection;
-import com.limelight.nvstream.input.KeyboardPacket;
-import com.limelight.nvstream.input.MouseButtonPacket;
-
-final class DefaultMainWindowListener implements MainWindowListener {
+final class KeyTranslator {
 
     private static final short[] keyTable = new short[GLFW_KEY_LAST + 1];
 
@@ -236,77 +225,18 @@ final class DefaultMainWindowListener implements MainWindowListener {
         keyTable[GLFW_KEY_MENU] = KeyEvent.VK_CONTEXT_MENU;
     }
 
-    private final NvConnection conn;
-    private double lastXpos;
-    private double lastYpos;
-
-    DefaultMainWindowListener(NvConnection conn) {
-        this.conn = conn;
-    }
-
-    @Override
-    public void onKey(int key, int scancode, int action, int mods) {
+    static short translate(int key) {
         if (key < 0 || key >= keyTable.length) {
-            return;
+            return 0;
         }
 
-        short nvKey = keyTable[key];
+        final short nvKey = keyTable[key];
         if (nvKey == 0) {
-            return;
+            return 0;
         }
 
-        nvKey = (short) (0x80 << 8 | nvKey);
-
-        byte nvMods = 0x0;
-        if ((mods & GLFW_MOD_SHIFT) != 0) {
-            nvMods |= KeyboardPacket.MODIFIER_SHIFT;
-        }
-        if ((mods & GLFW_MOD_CONTROL) != 0) {
-            nvMods |= KeyboardPacket.MODIFIER_CTRL;
-        }
-        if ((mods & GLFW_MOD_ALT) != 0) {
-            nvMods |= KeyboardPacket.MODIFIER_ALT;
-        }
-
-        if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-            conn.sendKeyboardInput(nvKey, KeyboardPacket.KEY_DOWN, nvMods);
-        } else {
-            conn.sendKeyboardInput(nvKey, KeyboardPacket.KEY_UP, nvMods);
-        }
+        return (short) (0x80 << 8 | nvKey);
     }
 
-    @Override
-    public void onCursorPos(double xpos, double ypos) {
-        conn.sendMouseMove((short) (xpos - lastXpos), (short) (ypos - lastYpos));
-        lastXpos = xpos;
-        lastYpos = ypos;
-    }
-
-    @Override
-    public void onMouseButton(int button, int action, int mods) {
-        final byte nvButton;
-        switch (button) {
-            case GLFW_MOUSE_BUTTON_RIGHT:
-                nvButton = MouseButtonPacket.BUTTON_RIGHT;
-                break;
-            case GLFW_MOUSE_BUTTON_MIDDLE:
-                nvButton = MouseButtonPacket.BUTTON_MIDDLE;
-                break;
-            default:
-                nvButton = MouseButtonPacket.BUTTON_LEFT;
-        }
-        if (action == GLFW_PRESS) {
-            conn.sendMouseButtonDown(nvButton);
-        } else {
-            conn.sendMouseButtonUp(nvButton);
-        }
-    }
-
-    @Override
-    public void onScroll(double xoffset, double yoffset) {
-        conn.sendMouseScroll((byte) -yoffset);
-    }
-
-    @Override
-    public void onJoystick(int jid, int event) {}
+    private KeyTranslator() {}
 }

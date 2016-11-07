@@ -17,6 +17,11 @@ import static org.lwjgl.glfw.GLFW.GLFW_JOYSTICK_LAST;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_GRAVE_ACCENT;
 import static org.lwjgl.glfw.GLFW.GLFW_MAXIMIZED;
+import static org.lwjgl.glfw.GLFW.GLFW_MOD_ALT;
+import static org.lwjgl.glfw.GLFW.GLFW_MOD_CONTROL;
+import static org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT;
+import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_MIDDLE;
+import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_RIGHT;
 import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_CORE_PROFILE;
 import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_FORWARD_COMPAT;
 import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_PROFILE;
@@ -24,6 +29,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
 import static org.lwjgl.glfw.GLFW.GLFW_RED_BITS;
 import static org.lwjgl.glfw.GLFW.GLFW_REFRESH_RATE;
 import static org.lwjgl.glfw.GLFW.GLFW_RELEASE;
+import static org.lwjgl.glfw.GLFW.GLFW_REPEAT;
 import static org.lwjgl.glfw.GLFW.GLFW_TRUE;
 import static org.lwjgl.glfw.GLFW.GLFW_VISIBLE;
 import static org.lwjgl.glfw.GLFW.glfwCreateWindow;
@@ -108,6 +114,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.NvConnection;
+import com.limelight.nvstream.input.KeyboardPacket;
+import com.limelight.nvstream.input.MouseButtonPacket;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -143,6 +151,10 @@ final class MainWindow {
     private final Int2ShortMap gamepadAssignments;
     private final IntSet knownMissingGamepadMappings = new IntOpenHashSet();
 
+    // Fields for mouse cursor position
+    private double lastCursorXpos;
+    private double lastCursorYpos;
+
     // Fields for video stream
     private final Queue<FFmpegFrame> pendingFrames = new SpscArrayQueue<>(64);
     private int frameTexture;
@@ -164,7 +176,6 @@ final class MainWindow {
     private long streamRenderTime;
 
     private volatile NvConnection nvConn;
-    private volatile MainWindowListener listener;
 
     MainWindow(GamepadMappings availableGamepadMappings) {
         this.availableGamepadMappings = availableGamepadMappings;
@@ -174,24 +185,17 @@ final class MainWindow {
         currentWindow = this;
     }
 
+    public Osd osd() {
+        return osd;
+    }
+
     public void addFrame(FFmpegFrame frame) {
         pendingFrames.add(frame);
     }
 
     public void setNvConnection(NvConnection nvConn) {
         this.nvConn = nvConn;
-    }
-
-    public void setListener(MainWindowListener listener) {
-        this.listener = listener;
-    }
-
-    public Osd osd() {
-        return osd;
-    }
-
-    public void setOsdVisibility(boolean visible) {
-        pendingTasks.add(() -> setOsdVisibility(window, visible));
+        pendingTasks.add(() -> setOsdVisibility(window, false));
     }
 
     private void setOsdVisibility(long window, boolean visible) {
@@ -720,8 +724,28 @@ final class MainWindow {
 
         if (showOsd) {
             nk.onKey(window, key, scancode, action, mods);
-        } else if (listener != null) {
-            listener.onKey(key, scancode, action, mods);
+        } else if (nvConn != null) {
+            final short nvKey = KeyTranslator.translate(key);
+            if (nvKey == 0) {
+                return;
+            }
+
+            byte nvMods = 0x0;
+            if ((mods & GLFW_MOD_SHIFT) != 0) {
+                nvMods |= KeyboardPacket.MODIFIER_SHIFT;
+            }
+            if ((mods & GLFW_MOD_CONTROL) != 0) {
+                nvMods |= KeyboardPacket.MODIFIER_CTRL;
+            }
+            if ((mods & GLFW_MOD_ALT) != 0) {
+                nvMods |= KeyboardPacket.MODIFIER_ALT;
+            }
+
+            if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+                nvConn.sendKeyboardInput(nvKey, KeyboardPacket.KEY_DOWN, nvMods);
+            } else {
+                nvConn.sendKeyboardInput(nvKey, KeyboardPacket.KEY_UP, nvMods);
+            }
         }
     }
 
@@ -734,24 +758,41 @@ final class MainWindow {
     private void onCursorPos(long window, double xpos, double ypos) {
         if (showOsd) {
             nk.onCursorPos(window, xpos, ypos);
-        } else if (listener != null) {
-            listener.onCursorPos(xpos, ypos);
+        } else if (nvConn != null) {
+            nvConn.sendMouseMove((short) (xpos - lastCursorXpos), (short) (ypos - lastCursorYpos));
+            lastCursorXpos = xpos;
+            lastCursorYpos = ypos;
         }
     }
 
     private void onMouseButton(long window, int button, int action, int mods) {
         if (showOsd) {
             nk.onMouseButton(window, button, action, mods);
-        } else if (listener != null) {
-            listener.onMouseButton(button, action, mods);
+        } else if (nvConn != null) {
+            final byte nvButton;
+            switch (button) {
+                case GLFW_MOUSE_BUTTON_RIGHT:
+                    nvButton = MouseButtonPacket.BUTTON_RIGHT;
+                    break;
+                case GLFW_MOUSE_BUTTON_MIDDLE:
+                    nvButton = MouseButtonPacket.BUTTON_MIDDLE;
+                    break;
+                default:
+                    nvButton = MouseButtonPacket.BUTTON_LEFT;
+            }
+            if (action == GLFW_PRESS) {
+                nvConn.sendMouseButtonDown(nvButton);
+            } else {
+                nvConn.sendMouseButtonUp(nvButton);
+            }
         }
     }
 
     private void onScroll(long window, double xoffset, double yoffset) {
         if (showOsd) {
             nk.onScroll(window, xoffset, yoffset);
-        } else if (listener != null) {
-            listener.onScroll(xoffset, yoffset);
+        } else if (nvConn != null) {
+            nvConn.sendMouseScroll((byte) -yoffset);
         }
     }
 

@@ -167,8 +167,6 @@ public final class Main {
             }
 
             window.setNvConnection(conn);
-            window.setListener(new DefaultMainWindowListener(conn));
-            window.setOsdVisibility(false);
         });
         thread.setName("NvConnection Starter");
         thread.start();
