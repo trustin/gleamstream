@@ -83,6 +83,10 @@ public class ControllerStream {
     public void start() {
         inputThread = new Thread(() -> {
             try {
+                // Move the mouse cursor very slightly to wake the screen up for gamepad-only scenarios.
+                sendPacket(new MouseMovePacket(context, (short) 1, (short) 1));
+                sendPacket(new MouseMovePacket(context, (short) -1, (short) -1));
+
                 while (!Thread.currentThread().isInterrupted()) {
                     final InputPacket packet = inputQueue.take();
 

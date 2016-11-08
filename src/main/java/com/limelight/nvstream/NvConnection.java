@@ -312,10 +312,10 @@ public class NvConnection {
         // it to the instance variable once the object is properly initialized.
         // This avoids the race where inputStream != null but inputStream.initialize()
         // has not returned yet.
-        ControllerStream tempController = new ControllerStream(this, context);
-        tempController.initialize(controlStream);
-        tempController.start();
-        inputStream = tempController;
+        ControllerStream inputStream = new ControllerStream(this, context);
+        inputStream.initialize(controlStream);
+        inputStream.start();
+        this.inputStream = inputStream;
         return true;
     }
 
