@@ -3,10 +3,9 @@ package com.limelight.nvstream.input;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-public class KeyboardPacket extends InputPacket {
-    private static final int PACKET_TYPE = 0x0A;
-    private static final int PACKET_LENGTH = 14;
+import com.limelight.nvstream.ConnectionContext;
 
+public final class KeyboardPacket extends InputPacket {
     public static final byte KEY_DOWN = 0x03;
     public static final byte KEY_UP = 0x04;
 
@@ -14,11 +13,14 @@ public class KeyboardPacket extends InputPacket {
     public static final byte MODIFIER_CTRL = 0x02;
     public static final byte MODIFIER_ALT = 0x04;
 
-    private short keyCode;
-    private byte keyDirection;
-    private byte modifier;
+    private static final int PACKET_TYPE = 0x0A;
+    private static final int PACKET_LENGTH = 14;
 
-    public KeyboardPacket(short keyCode, byte keyDirection, byte modifier) {
+    private final short keyCode;
+    private final byte keyDirection;
+    private final byte modifier;
+
+    KeyboardPacket(short keyCode, byte keyDirection, byte modifier) {
         super(PACKET_TYPE);
         this.keyCode = keyCode;
         this.keyDirection = keyDirection;
@@ -26,7 +28,7 @@ public class KeyboardPacket extends InputPacket {
     }
 
     @Override
-    public void toWirePayload(ByteBuffer bb) {
+    void toWirePayload(ConnectionContext ctx, ByteBuffer bb) {
         bb.order(ByteOrder.LITTLE_ENDIAN);
         bb.put(keyDirection);
         bb.putShort((short) 0);
@@ -38,7 +40,7 @@ public class KeyboardPacket extends InputPacket {
     }
 
     @Override
-    public int getPacketLength() {
+    int packetLength() {
         return PACKET_LENGTH;
     }
 }

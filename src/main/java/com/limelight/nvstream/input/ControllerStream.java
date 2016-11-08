@@ -7,7 +7,6 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -48,7 +47,7 @@ public class ControllerStream {
     private final LinkedBlockingQueue<InputPacket> inputQueue = new LinkedBlockingQueue<>();
 
     private final ByteBuffer stagingBuffer = ByteBuffer.allocate(128);
-    private final ByteBuffer sendBuffer = ByteBuffer.allocate(128).order(ByteOrder.BIG_ENDIAN);
+    private final ByteBuffer sendBuffer = ByteBuffer.allocate(128);
 
     public ControllerStream(NvConnection parent, ConnectionContext context) {
         this.parent = parent;
@@ -84,8 +83,8 @@ public class ControllerStream {
         inputThread = new Thread(() -> {
             try {
                 // Move the mouse cursor very slightly to wake the screen up for gamepad-only scenarios.
-                sendPacket(new MouseMovePacket(context, (short) 1, (short) 1));
-                sendPacket(new MouseMovePacket(context, (short) -1, (short) -1));
+                sendPacket(new MouseMovePacket((short) 1, (short) 1));
+                sendPacket(new MouseMovePacket((short) -1, (short) -1));
 
                 while (!Thread.currentThread().isInterrupted()) {
                     final InputPacket packet = inputQueue.take();
@@ -145,12 +144,10 @@ public class ControllerStream {
                                 if (queuedPacket instanceof MultiControllerPacket) {
                                     // Only initialize the batching block if we got here
                                     if (batchingBlock == null) {
-                                        batchingBlock = new ControllerBatchingBlock(
-                                                initialControllerPacket);
+                                        batchingBlock = new ControllerBatchingBlock(initialControllerPacket);
                                     }
 
-                                    if (batchingBlock.submitNewPacket(
-                                            (MultiControllerPacket) queuedPacket)) {
+                                    if (batchingBlock.submitNewPacket((MultiControllerPacket) queuedPacket)) {
                                         // Batching was successful, so remove this packet
                                         i.remove();
                                     } else {
@@ -206,8 +203,8 @@ public class ControllerStream {
 
     private void sendPacket(InputPacket packet) throws IOException {
         // Store the packet in wire form in the byte buffer
-        packet.toWire(stagingBuffer);
-        int packetLen = packet.getPacketLength();
+        packet.toWire(context, stagingBuffer);
+        int packetLen = packet.packetLength();
 
         // Get final encrypted size of this block
         int paddedLength = cipher.getEncryptedSize(packetLen);
@@ -231,9 +228,8 @@ public class ControllerStream {
             // future encryption. I think it may be a buffer overrun on their end but we'll have
             // to mimic it to work correctly.
             if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7 && paddedLength >= 32) {
-                cipher.initialize(context.riKey,
-                                  Arrays.copyOfRange(sendBuffer.array(), 4 + paddedLength - 16,
-                                                     4 + paddedLength));
+                cipher.initialize(context.riKey, Arrays.copyOfRange(
+                        sendBuffer.array(), 4 + paddedLength - 16, 4 + paddedLength));
             }
         } else {
             // Send the packet over the TCP connection on Gen 4 and below
@@ -248,34 +244,17 @@ public class ControllerStream {
         }
     }
 
-    public void sendControllerInput(short buttonFlags, byte leftTrigger, byte rightTrigger,
-                                    short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
-        if (context.serverGeneration == ConnectionContext.SERVER_GENERATION_3) {
-            // Use legacy controller packets for generation 3
-            queuePacket(new ControllerPacket(buttonFlags, leftTrigger,
-                                             rightTrigger, leftStickX, leftStickY,
-                                             rightStickX, rightStickY));
-        } else {
-            // Use multi-controller packets for generation 4 and above
-            queuePacket(new MultiControllerPacket(context, (short) 0, buttonFlags, leftTrigger,
-                                                  rightTrigger, leftStickX, leftStickY,
-                                                  rightStickX, rightStickY));
-        }
-    }
-
     public void sendControllerInput(short controllerNumber, short buttonFlags, byte leftTrigger,
                                     byte rightTrigger,
                                     short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
         if (context.serverGeneration == ConnectionContext.SERVER_GENERATION_3) {
             // Use legacy controller packets for generation 3
-            queuePacket(new ControllerPacket(buttonFlags, leftTrigger,
-                                             rightTrigger, leftStickX, leftStickY,
-                                             rightStickX, rightStickY));
+            queuePacket(new ControllerPacket(buttonFlags, leftTrigger, rightTrigger,
+                                             leftStickX, leftStickY, rightStickX, rightStickY));
         } else {
             // Use multi-controller packets for generation 4 and above
-            queuePacket(new MultiControllerPacket(context, controllerNumber, buttonFlags, leftTrigger,
-                                                  rightTrigger, leftStickX, leftStickY,
-                                                  rightStickX, rightStickY));
+            queuePacket(new MultiControllerPacket(controllerNumber, buttonFlags, leftTrigger, rightTrigger,
+                                                  leftStickX, leftStickY, rightStickX, rightStickY));
         }
     }
 
@@ -288,7 +267,7 @@ public class ControllerStream {
     }
 
     public void sendMouseMove(short deltaX, short deltaY) {
-        queuePacket(new MouseMovePacket(context, deltaX, deltaY));
+        queuePacket(new MouseMovePacket(deltaX, deltaY));
     }
 
     public void sendKeyboardInput(short keyMap, byte keyDirection, byte modifier) {
@@ -296,7 +275,7 @@ public class ControllerStream {
     }
 
     public void sendMouseScroll(byte scrollClicks) {
-        queuePacket(new MouseScrollPacket(context, scrollClicks));
+        queuePacket(new MouseScrollPacket(scrollClicks));
     }
 
     private interface InputCipher {

@@ -352,7 +352,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                     int[] lastTuple = null;
                     if (tuple[0] != 0 || tuple[1] != 0) {
                         // Aggregate all lost frames into one range
-                        for (; ; ) {
+                        for (;;) {
                             int[] nextTuple = lastTuple = invalidReferenceFrameTuples.poll();
                             if (nextTuple == null) {
                                 break;
@@ -364,8 +364,6 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                                 // of the loop because we want to dequeue all pending requests
                                 idrFrameRequired = true;
                             }
-
-                            lastTuple = nextTuple;
                         }
                     } else {
                         // We must require an IDR frame
@@ -475,9 +473,9 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     }
 
     static class NvCtlPacket {
-        public short type;
-        public short paylen;
-        public byte[] payload;
+        private final short type;
+        private final short paylen;
+        private final byte[] payload;
 
         private static final ByteBuffer headerBuffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
         private static final ByteBuffer serializationBuffer = ByteBuffer.allocate(256).order(
@@ -520,6 +518,8 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                 if (offset != payload.length) {
                     throw new IOException("Socket closed prematurely");
                 }
+            } else {
+                payload = null;
             }
         }
 
@@ -537,34 +537,15 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             if (paylen != 0) {
                 payload = new byte[paylen];
                 System.arraycopy(packet, 4, payload, 0, paylen);
+            } else {
+                payload = null;
             }
-        }
-
-        NvCtlPacket(short type, short paylen) {
-            this.type = type;
-            this.paylen = paylen;
         }
 
         NvCtlPacket(short type, short paylen, byte[] payload) {
             this.type = type;
             this.paylen = paylen;
             this.payload = payload;
-        }
-
-        public short getType() {
-            return type;
-        }
-
-        public short getPaylen() {
-            return paylen;
-        }
-
-        public void setType(short type) {
-            this.type = type;
-        }
-
-        public void setPaylen(short paylen) {
-            this.paylen = paylen;
         }
 
         public void write(OutputStream out) throws IOException {
@@ -595,14 +576,11 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     }
 
     static class NvCtlResponse extends NvCtlPacket {
-        public short status;
+
+        private short status;
 
         NvCtlResponse(InputStream in) throws IOException {
             super(in);
-        }
-
-        NvCtlResponse(short type, short paylen) {
-            super(type, paylen);
         }
 
         NvCtlResponse(short type, short paylen, byte[] payload) {

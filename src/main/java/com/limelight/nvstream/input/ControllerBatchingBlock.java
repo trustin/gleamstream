@@ -1,10 +1,10 @@
 package com.limelight.nvstream.input;
 
-public class ControllerBatchingBlock {
+final class ControllerBatchingBlock {
 
-    private byte[] axisDirs = new byte[6];
+    private final byte[] axisDirs = new byte[6];
 
-    private short buttonFlags;
+    private final short buttonFlags;
     private byte leftTrigger;
     private byte rightTrigger;
     private short leftStickX;
@@ -13,15 +13,15 @@ public class ControllerBatchingBlock {
     private short rightStickY;
     private short controllerNumber;
 
-    public ControllerBatchingBlock(MultiControllerPacket initialPacket) {
-        this.controllerNumber = initialPacket.controllerNumber;
-        this.buttonFlags = initialPacket.buttonFlags;
-        this.leftTrigger = initialPacket.leftTrigger;
-        this.rightTrigger = initialPacket.rightTrigger;
-        this.leftStickX = initialPacket.leftStickX;
-        this.leftStickY = initialPacket.leftStickY;
-        this.rightStickX = initialPacket.rightStickX;
-        this.rightStickY = initialPacket.rightStickY;
+    ControllerBatchingBlock(MultiControllerPacket initialPacket) {
+        controllerNumber = initialPacket.controllerNumber;
+        buttonFlags = initialPacket.buttonFlags;
+        leftTrigger = initialPacket.leftTrigger;
+        rightTrigger = initialPacket.rightTrigger;
+        leftStickX = initialPacket.leftStickX;
+        leftStickY = initialPacket.leftStickY;
+        rightStickX = initialPacket.rightStickX;
+        rightStickY = initialPacket.rightStickY;
     }
 
     private boolean checkDirs(short currentVal, short newVal, int dirIndex) {
@@ -53,7 +53,7 @@ public class ControllerBatchingBlock {
     // We have several restrictions that will cause batching to break up the controller packets.
     // 1) Button flags must be the same for all packets in the batch
     // 2) The movement direction of all axes must remain the same or be neutral
-    public boolean submitNewPacket(MultiControllerPacket packet) {
+    boolean submitNewPacket(MultiControllerPacket packet) {
         if (buttonFlags != packet.buttonFlags ||
             controllerNumber != packet.controllerNumber ||
             !checkDirs(leftTrigger, packet.leftTrigger, 0) ||
@@ -65,17 +65,17 @@ public class ControllerBatchingBlock {
             return false;
         }
 
-        this.controllerNumber = packet.controllerNumber;
-        this.leftTrigger = packet.leftTrigger;
-        this.rightTrigger = packet.rightTrigger;
-        this.leftStickX = packet.leftStickX;
-        this.leftStickY = packet.leftStickY;
-        this.rightStickX = packet.rightStickX;
-        this.rightStickY = packet.rightStickY;
+        controllerNumber = packet.controllerNumber;
+        leftTrigger = packet.leftTrigger;
+        rightTrigger = packet.rightTrigger;
+        leftStickX = packet.leftStickX;
+        leftStickY = packet.leftStickY;
+        rightStickX = packet.rightStickX;
+        rightStickY = packet.rightStickY;
         return true;
     }
 
-    public void reinitializePacket(MultiControllerPacket packet) {
+    void reinitializePacket(MultiControllerPacket packet) {
         packet.controllerNumber = controllerNumber;
         packet.buttonFlags = buttonFlags;
         packet.leftTrigger = leftTrigger;

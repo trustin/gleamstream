@@ -417,17 +417,6 @@ public class NvConnection {
                                         rightStickX, rightStickY);
     }
 
-    public void sendControllerInput(final short buttonFlags,
-                                    final byte leftTrigger, final byte rightTrigger,
-                                    final short leftStickX, final short leftStickY,
-                                    final short rightStickX, final short rightStickY) {
-        if (inputStream == null) { return; }
-
-        inputStream.sendControllerInput(buttonFlags, leftTrigger,
-                                        rightTrigger, leftStickX, leftStickY,
-                                        rightStickX, rightStickY);
-    }
-
     public void sendKeyboardInput(final short keyMap, final byte keyDirection, final byte modifier) {
         if (inputStream == null) { return; }
 

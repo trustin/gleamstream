@@ -3,26 +3,12 @@ package com.limelight.nvstream.input;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-public class ControllerPacket extends MultiControllerPacket {
-    private static final byte[] HEADER =
-            {
-                    0x0A,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x14
-            };
+import com.limelight.nvstream.ConnectionContext;
 
-    private static final byte[] TAIL =
-            {
-                    (byte) 0x9C,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x55,
-                    0x00
-            };
+public final class ControllerPacket extends MultiControllerPacket {
+
+    private static final byte[] HEADER = { 0x0A, 0x00, 0x00, 0x00, 0x00, 0x14 };
+    private static final byte[] TAIL = { (byte) 0x9C, 0x00, 0x00, 0x00, 0x55, 0x00 };
 
     private static final int PACKET_TYPE = 0x18;
 
@@ -43,28 +29,17 @@ public class ControllerPacket extends MultiControllerPacket {
     public static final short SPECIAL_BUTTON_FLAG = 0x0400;
 
     private static final short PAYLOAD_LENGTH = 24;
-    private static final short PACKET_LENGTH = PAYLOAD_LENGTH +
-                                               HEADER_LENGTH;
+    private static final short PACKET_LENGTH = PAYLOAD_LENGTH + HEADER_LENGTH;
 
-    public ControllerPacket(short buttonFlags, byte leftTrigger, byte rightTrigger,
+    ControllerPacket(short buttonFlags, byte leftTrigger, byte rightTrigger,
                             short leftStickX, short leftStickY,
                             short rightStickX, short rightStickY) {
         super(PACKET_TYPE, (short) 0, buttonFlags, leftTrigger, rightTrigger, leftStickX,
               leftStickY, rightStickX, rightStickY);
-
-        this.buttonFlags = buttonFlags;
-        this.leftTrigger = leftTrigger;
-        this.rightTrigger = rightTrigger;
-
-        this.leftStickX = leftStickX;
-        this.leftStickY = leftStickY;
-
-        this.rightStickX = rightStickX;
-        this.rightStickY = rightStickY;
     }
 
     @Override
-    public void toWirePayload(ByteBuffer bb) {
+    void toWirePayload(ConnectionContext ctx, ByteBuffer bb) {
         bb.order(ByteOrder.LITTLE_ENDIAN);
         bb.put(HEADER);
         bb.putShort(buttonFlags);
@@ -78,7 +53,7 @@ public class ControllerPacket extends MultiControllerPacket {
     }
 
     @Override
-    public int getPacketLength() {
+    int packetLength() {
         return PACKET_LENGTH;
     }
 }

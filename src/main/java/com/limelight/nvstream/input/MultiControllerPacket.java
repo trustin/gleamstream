@@ -1,27 +1,20 @@
 package com.limelight.nvstream.input;
 
+import static com.limelight.nvstream.ConnectionContext.SERVER_GENERATION_5;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import com.limelight.nvstream.ConnectionContext;
 
-public class MultiControllerPacket extends InputPacket {
-    private static final byte[] TAIL =
-            {
-                    (byte) 0x9C,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x55,
-                    0x00
-            };
+class MultiControllerPacket extends InputPacket {
+    private static final byte[] TAIL = { (byte) 0x9C, 0x00, 0x00, 0x00, 0x55, 0x00 };
 
     private static final int HEADER_CODE = 0x0d;
     private static final int PACKET_TYPE = 0x1e;
 
     private static final short PAYLOAD_LENGTH = 30;
-    private static final short PACKET_LENGTH = PAYLOAD_LENGTH +
-                                               HEADER_LENGTH;
+    private static final short PACKET_LENGTH = PAYLOAD_LENGTH + HEADER_LENGTH;
 
     short controllerNumber;
     short buttonFlags;
@@ -32,20 +25,9 @@ public class MultiControllerPacket extends InputPacket {
     short rightStickX;
     short rightStickY;
 
-    private int headerCode;
-
-    public MultiControllerPacket(ConnectionContext context,
-                                 short controllerNumber, short buttonFlags, byte leftTrigger, byte rightTrigger,
-                                 short leftStickX, short leftStickY,
-                                 short rightStickX, short rightStickY) {
+    MultiControllerPacket(short controllerNumber, short buttonFlags, byte leftTrigger, byte rightTrigger,
+                          short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
         super(PACKET_TYPE);
-
-        this.headerCode = HEADER_CODE;
-
-        // On Gen 5 servers, the header code is decremented by one
-        if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
-            headerCode--;
-        }
 
         this.controllerNumber = controllerNumber;
 
@@ -60,11 +42,9 @@ public class MultiControllerPacket extends InputPacket {
         this.rightStickY = rightStickY;
     }
 
-    public MultiControllerPacket(int packetType,
-                                 short controllerNumber, short buttonFlags,
-                                 byte leftTrigger, byte rightTrigger,
-                                 short leftStickX, short leftStickY,
-                                 short rightStickX, short rightStickY) {
+    MultiControllerPacket(int packetType,
+                          short controllerNumber, short buttonFlags, byte leftTrigger, byte rightTrigger,
+                          short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
         super(packetType);
 
         this.controllerNumber = controllerNumber;
@@ -78,12 +58,14 @@ public class MultiControllerPacket extends InputPacket {
 
         this.rightStickX = rightStickX;
         this.rightStickY = rightStickY;
+
     }
 
     @Override
-    public void toWirePayload(ByteBuffer bb) {
+    void toWirePayload(ConnectionContext ctx, ByteBuffer bb) {
         bb.order(ByteOrder.LITTLE_ENDIAN);
-        bb.putInt(headerCode);
+        // On Gen 5 servers, the header code is decremented by one
+        bb.putInt(ctx.serverGeneration >= SERVER_GENERATION_5 ? HEADER_CODE - 1 : HEADER_CODE);
         bb.putShort((short) 0x1a);
         bb.putShort(controllerNumber);
         bb.putShort((short) 0x0f); // Active controller flags
@@ -99,7 +81,7 @@ public class MultiControllerPacket extends InputPacket {
     }
 
     @Override
-    public int getPacketLength() {
+    int packetLength() {
         return PACKET_LENGTH;
     }
 }

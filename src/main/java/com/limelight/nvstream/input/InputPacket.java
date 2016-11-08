@@ -3,27 +3,30 @@ package com.limelight.nvstream.input;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-public abstract class InputPacket {
-    public static final int HEADER_LENGTH = 0x4;
+import com.limelight.nvstream.ConnectionContext;
 
-    protected int packetType;
+abstract class InputPacket {
 
-    public InputPacket(int packetType) {
+    static final int HEADER_LENGTH = 0x4;
+
+    private final int packetType;
+
+    protected InputPacket(int packetType) {
         this.packetType = packetType;
     }
 
-    public abstract void toWirePayload(ByteBuffer bb);
+    abstract int packetLength();
 
-    public abstract int getPacketLength();
+    void toWire(ConnectionContext ctx, ByteBuffer bb) {
+        bb.rewind();
+        toWireHeader(bb);
+        toWirePayload(ctx, bb);
+    }
 
-    public void toWireHeader(ByteBuffer bb) {
+    private void toWireHeader(ByteBuffer bb) {
         bb.order(ByteOrder.BIG_ENDIAN);
         bb.putInt(packetType);
     }
 
-    public void toWire(ByteBuffer bb) {
-        bb.rewind();
-        toWireHeader(bb);
-        toWirePayload(bb);
-    }
+    abstract void toWirePayload(ConnectionContext ctx, ByteBuffer bb);
 }
