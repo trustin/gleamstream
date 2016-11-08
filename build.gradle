@@ -105,3 +105,8 @@ startScripts {
     unixStartScriptGenerator.template =
             resources.text.fromFile("$project.projectDir/src/build/unixStartScript.txt")
 }
+
+distTar {
+    compression = Compression.GZIP
+    extension = 'tar.gz'
+}
