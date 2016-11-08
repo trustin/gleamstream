@@ -7,7 +7,8 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedTransferQueue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -170,7 +171,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
 
     private Thread lossStatsThread;
     private Thread resyncThread;
-    private final LinkedBlockingQueue<int[]> invalidReferenceFrameTuples = new LinkedBlockingQueue<>();
+    private final BlockingQueue<int[]> invalidReferenceFrameTuples = new LinkedTransferQueue<>();
     private volatile boolean aborting;
     private boolean forceIdrRequest;
 

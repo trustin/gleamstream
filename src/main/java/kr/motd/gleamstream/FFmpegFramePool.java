@@ -5,15 +5,15 @@ import static org.bytedeco.javacpp.avutil.AV_PIX_FMT_BGR0;
 import static org.bytedeco.javacpp.avutil.av_frame_alloc;
 import static org.bytedeco.javacpp.avutil.av_image_fill_arrays;
 
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedTransferQueue;
 
 import org.bytedeco.javacpp.BytePointer;
 
 final class FFmpegFramePool {
 
     private static final int POOL_SIZE = 8;
-    private final BlockingQueue<FFmpegFrame> pool = new ArrayBlockingQueue<>(POOL_SIZE);
+    private final BlockingQueue<FFmpegFrame> pool = new LinkedTransferQueue<>();
 
     private final int width;
     private final int height;

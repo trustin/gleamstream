@@ -9,7 +9,8 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedTransferQueue;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -45,7 +46,7 @@ public class ControllerStream {
     private final InputCipher cipher;
 
     private Thread inputThread;
-    private final LinkedBlockingQueue<InputPacket> inputQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<InputPacket> inputQueue = new LinkedTransferQueue<>();
 
     private final ByteBuffer stagingBuffer = ByteBuffer.allocate(128);
     private final ByteBuffer sendBuffer = ByteBuffer.allocate(128);

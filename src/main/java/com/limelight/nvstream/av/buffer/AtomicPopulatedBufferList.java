@@ -1,17 +1,21 @@
 package com.limelight.nvstream.av.buffer;
 
+import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+
+import org.jctools.queues.MpscArrayQueue;
 
 public class AtomicPopulatedBufferList<T> extends AbstractPopulatedBufferList<T> {
-    private final ArrayBlockingQueue<T> populatedList;
-    private final ArrayBlockingQueue<T> freeList;
+    private final BlockingQueue<T> populatedList;
+    private final Queue<T> freeList;
 
     @SuppressWarnings("unchecked")
     public AtomicPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
         super(maxQueueSize, factory);
 
-        populatedList = new ArrayBlockingQueue<>(maxQueueSize, false);
-        freeList = new ArrayBlockingQueue<>(maxQueueSize, false);
+        populatedList = new ArrayBlockingQueue<>(maxQueueSize);
+        freeList = new MpscArrayQueue<>(maxQueueSize);
 
         for (int i = 0; i < maxQueueSize; i++) {
             freeList.add((T) factory.createFreeBuffer());
