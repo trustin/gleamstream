@@ -459,13 +459,17 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     }
 
     static class NvCtlPacket {
+
+        private static final byte[] EMPTY_PAYLOAD = new byte[0];
+
+        private static final ByteBuffer headerBuffer =
+                ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
+        private static final ByteBuffer serializationBuffer =
+                ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN);
+
         private final short type;
         private final short paylen;
         private final byte[] payload;
-
-        private static final ByteBuffer headerBuffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
-        private static final ByteBuffer serializationBuffer = ByteBuffer.allocate(256).order(
-                ByteOrder.LITTLE_ENDIAN);
 
         NvCtlPacket(InputStream in) throws IOException {
             // Use the class's static header buffer for parsing the header
@@ -505,7 +509,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                     throw new IOException("Socket closed prematurely");
                 }
             } else {
-                payload = null;
+                payload = EMPTY_PAYLOAD;
             }
         }
 
@@ -524,7 +528,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                 payload = new byte[paylen];
                 System.arraycopy(packet, 4, payload, 0, paylen);
             } else {
-                payload = null;
+                payload = EMPTY_PAYLOAD;
             }
         }
 
