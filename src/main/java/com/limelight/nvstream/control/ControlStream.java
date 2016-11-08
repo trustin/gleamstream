@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
+import com.limelight.nvstream.ThreadUtil;
 import com.limelight.nvstream.TimeHelper;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
@@ -278,23 +279,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             }
         }
 
-        if (lossStatsThread != null) {
-            while (lossStatsThread.isAlive()) {
-                lossStatsThread.interrupt();
-                try {
-                    lossStatsThread.join();
-                } catch (InterruptedException ignored) {}
-            }
-        }
-
-        if (resyncThread != null) {
-            while (resyncThread.isAlive()) {
-                resyncThread.interrupt();
-                try {
-                    resyncThread.join();
-                } catch (InterruptedException ignored) {}
-            }
-        }
+        ThreadUtil.stop(lossStatsThread, resyncThread);
 
         if (enetConnection != null) {
             try {

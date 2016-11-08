@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
+import com.limelight.nvstream.ThreadUtil;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
@@ -65,14 +66,7 @@ public class AudioStream {
         }
 
         // Wait for threads to terminate
-        for (Thread t : threads) {
-            while (t.isAlive()) {
-                t.interrupt();
-                try {
-                    t.join();
-                } catch (InterruptedException ignored) {}
-            }
-        }
+        ThreadUtil.stop(threads);
 
         streamListener.streamClosing();
 

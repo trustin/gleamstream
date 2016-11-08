@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
+import com.limelight.nvstream.ThreadUtil;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.DecodeUnit;
 import com.limelight.nvstream.av.RtpPacket;
@@ -79,14 +80,7 @@ public class VideoStream {
         }
 
         // Wait for threads to terminate
-        for (Thread t : threads) {
-            while (t.isAlive()) {
-                t.interrupt();
-                try {
-                    t.join();
-                } catch (InterruptedException ignored) {}
-            }
-        }
+        ThreadUtil.stop(threads);
 
         if (firstFrameSocket != null) {
             try {

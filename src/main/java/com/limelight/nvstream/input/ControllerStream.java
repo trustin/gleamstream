@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
+import com.limelight.nvstream.ThreadUtil;
 import com.limelight.nvstream.control.InputPacketSender;
 
 public class ControllerStream {
@@ -191,14 +192,7 @@ public class ControllerStream {
             }
         }
 
-        if (inputThread != null) {
-            while (inputThread.isAlive()) {
-                inputThread.interrupt();
-                try {
-                    inputThread.join();
-                } catch (InterruptedException ignored) {}
-            }
-        }
+        ThreadUtil.stop(inputThread);
     }
 
     private void sendPacket(InputPacket packet) throws IOException {
