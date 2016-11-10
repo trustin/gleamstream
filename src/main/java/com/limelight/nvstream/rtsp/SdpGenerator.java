@@ -7,13 +7,14 @@ import java.nio.ByteOrder;
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer.VideoFormat;
 
-public class SdpGenerator {
+public final class SdpGenerator {
+
     private static void addSessionAttribute(StringBuilder config, String attribute, String value) {
-        config.append("a=" + attribute + ":" + value + " \r\n");
+        config.append("a=" + attribute + ':' + value + " \r\n");
     }
 
     private static void addSessionAttributeBytes(StringBuilder config, String attribute, byte[] value) {
-        char str[] = new char[value.length];
+        char[] str = new char[value.length];
 
         for (int i = 0; i < value.length; i++) {
             str[i] = (char) value[i];
@@ -58,7 +59,7 @@ public class SdpGenerator {
         addSessionAttribute(config, "x-nv-video[0].rateControlMode", "4");
     }
 
-    private static void addGen5Attributes(StringBuilder config, ConnectionContext context) {
+    private static void addGen5Attributes(StringBuilder config) {
         // We want to use the new ENet connections for control and input
         addSessionAttribute(config, "x-nv-general.useReliableUdp", "1");
         addSessionAttribute(config, "x-nv-ri.useControlChannel", "1");
@@ -92,11 +93,12 @@ public class SdpGenerator {
         config.append("\r\n");
         config.append("s=NVIDIA Streaming Client").append("\r\n");
 
-        addSessionAttribute(config, "x-nv-video[0].clientViewportWd", "" + context.negotiatedWidth);
-        addSessionAttribute(config, "x-nv-video[0].clientViewportHt", "" + context.negotiatedHeight);
-        addSessionAttribute(config, "x-nv-video[0].maxFPS", "" + context.negotiatedFps);
+        addSessionAttribute(config, "x-nv-video[0].clientViewportWd", String.valueOf(context.negotiatedWidth));
+        addSessionAttribute(config, "x-nv-video[0].clientViewportHt", String.valueOf(context.negotiatedHeight));
+        addSessionAttribute(config, "x-nv-video[0].maxFPS", String.valueOf(context.negotiatedFps));
 
-        addSessionAttribute(config, "x-nv-video[0].packetSize", "" + context.streamConfig.getMaxPacketSize());
+        addSessionAttribute(config, "x-nv-video[0].packetSize",
+                            String.valueOf(context.streamConfig.getMaxPacketSize()));
 
         addSessionAttribute(config, "x-nv-video[0].timeoutLengthMs", "7000");
         addSessionAttribute(config, "x-nv-video[0].framesWithInvalidRefThreshold", "0");
@@ -112,8 +114,8 @@ public class SdpGenerator {
         }
 
         if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
-            addSessionAttribute(config, "x-nv-vqos[0].bw.minimumBitrateKbps", "" + bitrate);
-            addSessionAttribute(config, "x-nv-vqos[0].bw.maximumBitrateKbps", "" + bitrate);
+            addSessionAttribute(config, "x-nv-vqos[0].bw.minimumBitrateKbps", String.valueOf(bitrate));
+            addSessionAttribute(config, "x-nv-vqos[0].bw.maximumBitrateKbps", String.valueOf(bitrate));
         } else {
             if (context.streamConfig.getRemote()) {
                 addSessionAttribute(config, "x-nv-video[0].averageBitrate", "4");
@@ -123,8 +125,8 @@ public class SdpGenerator {
             // We don't support dynamic bitrate scaling properly (it tends to bounce between min and max and never
             // settle on the optimal bitrate if it's somewhere in the middle), so we'll just latch the bitrate
             // to the requested value.
-            addSessionAttribute(config, "x-nv-vqos[0].bw.minimumBitrate", "" + bitrate);
-            addSessionAttribute(config, "x-nv-vqos[0].bw.maximumBitrate", "" + bitrate);
+            addSessionAttribute(config, "x-nv-vqos[0].bw.minimumBitrate", String.valueOf(bitrate));
+            addSessionAttribute(config, "x-nv-vqos[0].bw.maximumBitrate", String.valueOf(bitrate));
         }
 
         // Using FEC turns padding on which makes us have to take the slow path
@@ -158,7 +160,7 @@ public class SdpGenerator {
                 break;
             case ConnectionContext.SERVER_GENERATION_5:
             default:
-                addGen5Attributes(config, context);
+                addGen5Attributes(config);
                 break;
         }
 
@@ -182,9 +184,9 @@ public class SdpGenerator {
 
             // Enable surround sound if configured for it
             addSessionAttribute(config, "x-nv-audio.surround.numChannels",
-                                "" + context.streamConfig.getAudioChannelCount());
+                                String.valueOf(context.streamConfig.getAudioChannelCount()));
             addSessionAttribute(config, "x-nv-audio.surround.channelMask",
-                                "" + context.streamConfig.getAudioChannelMask());
+                                String.valueOf(context.streamConfig.getAudioChannelMask()));
             if (context.streamConfig.getAudioChannelCount() > 2) {
                 addSessionAttribute(config, "x-nv-audio.surround.enable", "1");
             } else {
@@ -202,4 +204,6 @@ public class SdpGenerator {
 
         return config.toString();
     }
+
+    private SdpGenerator() {}
 }

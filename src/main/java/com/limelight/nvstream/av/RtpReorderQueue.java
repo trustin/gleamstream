@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.TimeHelper;
 
-public class RtpReorderQueue {
+public final class RtpReorderQueue {
 
     private static final Logger logger = LoggerFactory.getLogger(RtpReorderQueue.class);
 
@@ -63,11 +63,7 @@ public class RtpReorderQueue {
             }
         }
 
-        RtpQueueEntry entry = new RtpQueueEntry();
-        entry.packet = packet;
-        entry.queueTime = TimeHelper.getMonotonicMillis();
-        entry.sequenceNumber = seq;
-
+        RtpQueueEntry entry = new RtpQueueEntry(packet, seq, TimeHelper.getMonotonicMillis());
         if (oldestQueuedTime == Long.MAX_VALUE) {
             oldestQueuedTime = entry.queueTime;
         }
@@ -167,7 +163,7 @@ public class RtpReorderQueue {
                 }
             }
         } else {
-            // Validate that the queue remains within our contraints
+            // Validate that the queue remains within our constraints
             RtpQueueEntry lowestEntry = validateQueueConstraints();
 
             // If the queue is now empty after validating queue constraints,
@@ -230,9 +226,14 @@ public class RtpReorderQueue {
     }
 
     private static class RtpQueueEntry {
-        public RtpPacketFields packet;
+        final RtpPacketFields packet;
+        final short sequenceNumber;
+        final long queueTime;
 
-        public short sequenceNumber;
-        public long queueTime;
+        RtpQueueEntry(RtpPacketFields packet, short sequenceNumber, long queueTime) {
+            this.packet = packet;
+            this.sequenceNumber = sequenceNumber;
+            this.queueTime = queueTime;
+        }
     }
 }

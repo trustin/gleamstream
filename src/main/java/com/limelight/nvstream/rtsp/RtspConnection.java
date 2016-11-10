@@ -21,19 +21,19 @@ public class RtspConnection {
     public static final int RTSP_TIMEOUT = 10000;
 
     private int sequenceNumber = 1;
-    private int sessionId = 0;
+    private int sessionId;
     private EnetConnection enetConnection;
 
-    private ConnectionContext context;
-    private String hostStr;
+    private final ConnectionContext context;
+    private final String hostStr;
 
     public RtspConnection(ConnectionContext context) {
         this.context = context;
         if (context.serverAddress instanceof Inet6Address) {
             // RFC2732-formatted IPv6 address for use in URL
-            this.hostStr = "[" + context.serverAddress.getHostAddress() + "]";
+            hostStr = '[' + context.serverAddress.getHostAddress() + ']';
         } else {
-            this.hostStr = context.serverAddress.getHostAddress();
+            hostStr = context.serverAddress.getHostAddress();
         }
     }
 
@@ -72,12 +72,12 @@ public class RtspConnection {
 
     private RtspRequest createRtspRequest(String command, String target) {
         RtspRequest m = new RtspRequest(command, target, "RTSP/1.0",
-                                        sequenceNumber++, new HashMap<String, String>(), null);
-        m.setOption("X-GS-ClientVersion", "" + getRtspVersionFromContext(context));
+                                        sequenceNumber++, new HashMap<>(), null);
+        m.setOption("X-GS-ClientVersion", String.valueOf(getRtspVersionFromContext(context)));
         return m;
     }
 
-    private String byteBufferToString(byte[] bytes, int length) {
+    private static String byteBufferToString(byte[] bytes, int length) {
         StringBuilder message = new StringBuilder();
 
         for (int i = 0; i < length; i++) {
@@ -117,21 +117,15 @@ public class RtspConnection {
     }
 
     private RtspResponse transactRtspMessageTcp(RtspMessage m) throws IOException {
-        Socket s = new Socket();
-        try {
+        try (Socket s = new Socket()) {
             s.setTcpNoDelay(true);
             s.connect(new InetSocketAddress(context.serverAddress, PORT), RTSP_TIMEOUT);
             s.setSoTimeout(RTSP_TIMEOUT);
 
-            RtspStream rtspStream = new RtspStream(s.getInputStream(), s.getOutputStream());
-            try {
+            try (RtspStream rtspStream = new RtspStream(s.getInputStream(), s.getOutputStream())) {
                 rtspStream.write(m);
                 return (RtspResponse) rtspStream.read();
-            } finally {
-                rtspStream.close();
             }
-        } finally {
-            s.close();
         }
     }
 
@@ -158,7 +152,7 @@ public class RtspConnection {
     private RtspResponse setupStream(String streamName) throws IOException {
         RtspRequest m = createRtspRequest("SETUP", "streamid=" + streamName);
         if (sessionId != 0) {
-            m.setOption("Session", "" + sessionId);
+            m.setOption("Session", String.valueOf(sessionId));
         }
         if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_6) {
             // It looks like GFE doesn't care what we say our port is but
@@ -174,16 +168,16 @@ public class RtspConnection {
 
     private RtspResponse playStream(String streamName) throws IOException {
         RtspRequest m = createRtspRequest("PLAY", "streamid=" + streamName);
-        m.setOption("Session", "" + sessionId);
+        m.setOption("Session", String.valueOf(sessionId));
         return transactRtspMessage(m);
     }
 
     private RtspResponse sendVideoAnnounce() throws IOException {
         RtspRequest m = createRtspRequest("ANNOUNCE", "streamid=video");
-        m.setOption("Session", "" + sessionId);
+        m.setOption("Session", String.valueOf(sessionId));
         m.setOption("Content-type", "application/sdp");
         m.setPayload(SdpGenerator.generateSdpFromContext(context));
-        m.setOption("Content-length", "" + m.getPayload().length());
+        m.setOption("Content-length", String.valueOf(m.getPayload().length()));
         return transactRtspMessage(m);
     }
 
@@ -207,7 +201,7 @@ public class RtspConnection {
         try {
             sessionId = Integer.parseInt(r.getOption("Session"));
         } catch (NumberFormatException e) {
-            throw new IOException("RTSP SETUP response was malformed");
+            throw new IOException("RTSP SETUP response was malformed", e);
         }
     }
 

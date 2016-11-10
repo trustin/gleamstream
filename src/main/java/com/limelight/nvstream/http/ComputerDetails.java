@@ -50,15 +50,15 @@ public class ComputerDetails {
     @Override
     public String toString() {
         StringBuilder str = new StringBuilder();
-        str.append("State: ").append(state).append("\n");
-        str.append("Reachability: ").append(reachability).append("\n");
-        str.append("Name: ").append(name).append("\n");
-        str.append("UUID: ").append(uuid).append("\n");
-        str.append("Local IP: ").append(localIp).append("\n");
-        str.append("Remote IP: ").append(remoteIp).append("\n");
-        str.append("MAC Address: ").append(macAddress).append("\n");
-        str.append("Pair State: ").append(pairState).append("\n");
-        str.append("Running Game ID: ").append(runningGameId).append("\n");
+        str.append("State: ").append(state).append('\n');
+        str.append("Reachability: ").append(reachability).append('\n');
+        str.append("Name: ").append(name).append('\n');
+        str.append("UUID: ").append(uuid).append('\n');
+        str.append("Local IP: ").append(localIp).append('\n');
+        str.append("Remote IP: ").append(remoteIp).append('\n');
+        str.append("MAC Address: ").append(macAddress).append('\n');
+        str.append("Pair State: ").append(pairState).append('\n');
+        str.append("Running Game ID: ").append(runningGameId).append('\n');
         return str.toString();
     }
 }

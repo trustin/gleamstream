@@ -9,8 +9,6 @@ public abstract class VideoDecoderRenderer {
         H265
     }
 
-    ;
-
     public static final int FLAG_PREFER_QUALITY = 0x1;
     public static final int FLAG_FORCE_HARDWARE_DECODING = 0x2;
     public static final int FLAG_FORCE_SOFTWARE_DECODING = 0x4;

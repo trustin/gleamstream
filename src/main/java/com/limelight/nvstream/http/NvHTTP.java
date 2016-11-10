@@ -55,8 +55,6 @@ public class NvHTTP {
     public static final int CONNECTION_TIMEOUT = 3000;
     public static final int READ_TIMEOUT = 5000;
 
-    private static boolean verbose;
-
     public String baseUrlHttps;
     public String baseUrlHttp;
 
@@ -318,41 +316,18 @@ public class NvHTTP {
 
     String openHttpConnectionToString(String url, boolean enableReadTimeout)
             throws IOException {
-        if (verbose) {
-            logger.info("Requesting URL: " + url);
-        }
+        final StringBuilder buf = new StringBuilder();
 
-        ResponseBody resp;
-        try {
-            resp = openHttpConnection(url, enableReadTimeout);
-        } catch (IOException e) {
-            if (verbose) {
-                e.printStackTrace();
-            }
-
-            throw e;
-        }
-
-        StringBuilder strb = new StringBuilder();
-        try {
-            Scanner s = new Scanner(resp.byteStream());
-            try {
+        try (ResponseBody resp = openHttpConnection(url, enableReadTimeout)) {
+            try (Scanner s = new Scanner(resp.byteStream())) {
                 while (s.hasNext()) {
-                    strb.append(s.next());
-                    strb.append(' ');
+                    buf.append(s.next());
+                    buf.append(' ');
                 }
-            } finally {
-                s.close();
             }
-        } finally {
-            resp.close();
         }
 
-        if (verbose) {
-            logger.info(url + " -> " + strb);
-        }
-
-        return strb.toString();
+        return buf.toString();
     }
 
     public String getServerVersion(String serverInfo) throws XmlPullParserException, IOException {
@@ -564,15 +539,8 @@ public class NvHTTP {
     }
 
     public List<NvApp> getAppList() throws IOException, XmlPullParserException {
-        if (verbose) {
-            // Use the raw function so the app list is printed
-            return getAppListByReader(new StringReader(getAppListRaw()));
-        } else {
-            ResponseBody resp = openHttpConnection(baseUrlHttps + "/applist?" + buildUniqueIdUuidString(),
-                                                   true);
-            List<NvApp> appList = getAppListByReader(new InputStreamReader(resp.byteStream()));
-            resp.close();
-            return appList;
+        try (ResponseBody resp = openHttpConnection(baseUrlHttps + "/applist?" + buildUniqueIdUuidString(), true)) {
+            return getAppListByReader(new InputStreamReader(resp.byteStream()));
         }
     }
 

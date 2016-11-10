@@ -5,13 +5,13 @@ import com.limelight.nvstream.av.ByteBufferDescriptor;
 final class NAL {
 
     // This assumes that the buffer passed in is already a special sequence
-    public static boolean isAnnexBStartSequence(ByteBufferDescriptor specialSeq) {
+    static boolean isAnnexBStartSequence(ByteBufferDescriptor specialSeq) {
         // The start sequence is 00 00 01 or 00 00 00 01
         return specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x01;
     }
 
     // This assumes that the buffer passed in is already a special sequence
-    public static boolean isAnnexBFrameStart(ByteBufferDescriptor specialSeq) {
+    static boolean isAnnexBFrameStart(ByteBufferDescriptor specialSeq) {
         if (specialSeq.length != 4) { return false; }
 
         // The frame start sequence is 00 00 00 01
@@ -19,14 +19,14 @@ final class NAL {
     }
 
     // This assumes that the buffer passed in is already a special sequence
-    public static boolean isPadding(ByteBufferDescriptor specialSeq) {
+    static boolean isPadding(ByteBufferDescriptor specialSeq) {
         // The padding sequence is 00 00 00
         return specialSeq.data[specialSeq.offset + specialSeq.length - 1] == 0x00;
     }
 
     // Returns a buffer descriptor describing the start sequence
-    public static boolean getSpecialSequenceDescriptor(ByteBufferDescriptor buffer,
-                                                       ByteBufferDescriptor outputDesc) {
+    static boolean getSpecialSequenceDescriptor(ByteBufferDescriptor buffer,
+                                                ByteBufferDescriptor outputDesc) {
         // NAL start sequence is 00 00 00 01 or 00 00 01
         if (buffer.length < 3) { return false; }
 

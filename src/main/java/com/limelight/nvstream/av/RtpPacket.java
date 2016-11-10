@@ -9,8 +9,8 @@ public class RtpPacket implements RtpPacketFields {
     private short seqNum;
     private int headerSize;
 
-    private ByteBufferDescriptor buffer;
-    private ByteBuffer bb;
+    private final ByteBufferDescriptor buffer;
+    private final ByteBuffer bb;
 
     public static final int FLAG_EXTENSION = 0x10;
 
@@ -19,7 +19,7 @@ public class RtpPacket implements RtpPacketFields {
 
     public RtpPacket(byte[] buffer) {
         this.buffer = new ByteBufferDescriptor(buffer, 0, buffer.length);
-        this.bb = ByteBuffer.wrap(buffer).order(ByteOrder.BIG_ENDIAN);
+        bb = ByteBuffer.wrap(buffer).order(ByteOrder.BIG_ENDIAN);
     }
 
     public void initializeWithLength(int length) {
@@ -45,10 +45,12 @@ public class RtpPacket implements RtpPacketFields {
         buffer.length = length;
     }
 
+    @Override
     public byte getPacketType() {
         return packetType;
     }
 
+    @Override
     public short getRtpSequenceNumber() {
         return seqNum;
     }

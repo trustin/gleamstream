@@ -10,8 +10,8 @@ public class UnsynchronizedPopulatedBufferList<T> extends AbstractPopulatedBuffe
     public UnsynchronizedPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
         super(maxQueueSize, factory);
 
-        this.populatedList = new ArrayList<T>(maxQueueSize);
-        this.freeList = new ArrayList<T>(maxQueueSize);
+        populatedList = new ArrayList<>(maxQueueSize);
+        freeList = new ArrayList<>(maxQueueSize);
 
         for (int i = 0; i < maxQueueSize; i++) {
             freeList.add((T) factory.createFreeBuffer());

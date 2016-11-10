@@ -13,9 +13,6 @@ public class DecodeUnit {
     private int flags;
     private VideoPacket backingPacketHead;
 
-    public DecodeUnit() {
-    }
-
     public void initialize(ByteBufferDescriptor bufferHead, int dataLength,
                            int frameNumber, long receiveTimestamp, int flags, VideoPacket backingPacketHead) {
         this.bufferHead = bufferHead;

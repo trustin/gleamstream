@@ -4,7 +4,7 @@ public abstract class AbstractPopulatedBufferList<T> {
     protected final int maxQueueSize;
     protected final BufferFactory factory;
 
-    public AbstractPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
+    protected AbstractPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
         this.factory = factory;
         this.maxQueueSize = maxQueueSize;
     }

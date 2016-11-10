@@ -29,8 +29,7 @@ public class NvApp {
 
     public void setAppId(String appId) {
         try {
-            this.appId = Integer.parseInt(appId);
-            initialized = true;
+            setAppId(Integer.parseInt(appId));
         } catch (NumberFormatException e) {
             logger.warn("Malformed app ID: " + appId, e);
         }

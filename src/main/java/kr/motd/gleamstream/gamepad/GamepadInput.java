@@ -4,7 +4,6 @@ import java.io.IOException;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.SerializerProvider;
@@ -58,10 +57,6 @@ public final class GamepadInput {
         return outputEnd;
     }
 
-    public boolean isPositive() {
-        return end > start;
-    }
-
     static final class Serializer extends StdSerializer<GamepadInput> {
         private static final long serialVersionUID = 3091427135590960169L;
 
@@ -102,8 +97,7 @@ public final class GamepadInput {
         }
 
         @Override
-        public GamepadInput deserialize(JsonParser p, DeserializationContext ctx)
-                throws IOException, JsonProcessingException {
+        public GamepadInput deserialize(JsonParser p, DeserializationContext ctx) throws IOException {
             final JsonNode node = p.getCodec().readTree(p);
             final JsonNode idNode = node.get("id");
             if (idNode == null) {

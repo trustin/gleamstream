@@ -167,8 +167,8 @@ public class VideoDepacketizer {
             ByteBufferDescriptor firstBuffer = frameDataChainHead;
 
             int flags = 0;
-            if (NAL.getSpecialSequenceDescriptor(firstBuffer, cachedSpecialDesc) && NAL.isAnnexBFrameStart(
-                    cachedSpecialDesc)) {
+            if (NAL.getSpecialSequenceDescriptor(firstBuffer, cachedSpecialDesc) &&
+                NAL.isAnnexBFrameStart(cachedSpecialDesc)) {
                 switch (cachedSpecialDesc.data[cachedSpecialDesc.offset + cachedSpecialDesc.length]) {
 
                     // H265

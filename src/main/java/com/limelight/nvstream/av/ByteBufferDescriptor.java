@@ -1,6 +1,7 @@
 package com.limelight.nvstream.av;
 
 public class ByteBufferDescriptor {
+
     public byte[] data;
     public int offset;
     public int length;
@@ -14,16 +15,16 @@ public class ByteBufferDescriptor {
     }
 
     public ByteBufferDescriptor(ByteBufferDescriptor desc) {
-        this.data = desc.data;
-        this.offset = desc.offset;
-        this.length = desc.length;
+        data = desc.data;
+        offset = desc.offset;
+        length = desc.length;
     }
 
     public void reinitialize(byte[] data, int offset, int length) {
         this.data = data;
         this.offset = offset;
         this.length = length;
-        this.nextDescriptor = null;
+        nextDescriptor = null;
     }
 
     public void print() {
@@ -31,7 +32,7 @@ public class ByteBufferDescriptor {
     }
 
     public void print(int length) {
-        print(this.offset, length);
+        print(offset, length);
     }
 
     public void print(int offset, int length) {
