@@ -105,7 +105,7 @@ public class GamepadMapping {
     }
 
     @JsonProperty
-    public Set<Integer> getIgnoredAxes() {
+    public Set<Integer> ignoredAxes() {
         return ignoredAxes;
     }
 
