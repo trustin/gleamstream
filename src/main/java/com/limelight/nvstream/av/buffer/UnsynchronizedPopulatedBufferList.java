@@ -7,14 +7,14 @@ public class UnsynchronizedPopulatedBufferList<T> extends AbstractPopulatedBuffe
     private final ArrayList<T> freeList;
 
     @SuppressWarnings("unchecked")
-    public UnsynchronizedPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
+    public UnsynchronizedPopulatedBufferList(int maxQueueSize, BufferFactory<T> factory) {
         super(maxQueueSize, factory);
 
         populatedList = new ArrayList<>(maxQueueSize);
         freeList = new ArrayList<>(maxQueueSize);
 
         for (int i = 0; i < maxQueueSize; i++) {
-            freeList.add((T) factory.createFreeBuffer());
+            freeList.add(factory.createFreeBuffer());
         }
     }
 

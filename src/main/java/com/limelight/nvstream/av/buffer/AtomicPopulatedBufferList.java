@@ -11,14 +11,14 @@ public class AtomicPopulatedBufferList<T> extends AbstractPopulatedBufferList<T>
     private final Queue<T> freeList;
 
     @SuppressWarnings("unchecked")
-    public AtomicPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
+    public AtomicPopulatedBufferList(int maxQueueSize, BufferFactory<T> factory) {
         super(maxQueueSize, factory);
 
         populatedList = new ArrayBlockingQueue<>(maxQueueSize);
         freeList = new MpscArrayQueue<>(maxQueueSize);
 
         for (int i = 0; i < maxQueueSize; i++) {
-            freeList.add((T) factory.createFreeBuffer());
+            freeList.add(factory.createFreeBuffer());
         }
     }
 

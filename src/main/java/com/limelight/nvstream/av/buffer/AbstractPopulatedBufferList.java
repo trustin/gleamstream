@@ -2,9 +2,9 @@ package com.limelight.nvstream.av.buffer;
 
 public abstract class AbstractPopulatedBufferList<T> {
     protected final int maxQueueSize;
-    protected final BufferFactory factory;
+    protected final BufferFactory<T> factory;
 
-    protected AbstractPopulatedBufferList(int maxQueueSize, BufferFactory factory) {
+    protected AbstractPopulatedBufferList(int maxQueueSize, BufferFactory<T> factory) {
         this.factory = factory;
         this.maxQueueSize = maxQueueSize;
     }
@@ -34,9 +34,8 @@ public abstract class AbstractPopulatedBufferList<T> {
         throw new UnsupportedOperationException("Blocking is unsupported on this buffer list");
     }
 
-    public static interface BufferFactory {
-        public Object createFreeBuffer();
-
-        public void cleanupObject(Object o);
+    public interface BufferFactory<T> {
+        T createFreeBuffer();
+        void cleanupObject(T o);
     }
 }

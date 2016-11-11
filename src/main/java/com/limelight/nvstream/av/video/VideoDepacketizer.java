@@ -81,23 +81,23 @@ public class VideoDepacketizer {
             unsynchronized = true;
         }
 
-        AbstractPopulatedBufferList.BufferFactory factory = new AbstractPopulatedBufferList.BufferFactory() {
-            @Override
-            public Object createFreeBuffer() {
-                return new DecodeUnit();
-            }
+        AbstractPopulatedBufferList.BufferFactory<DecodeUnit> factory =
+                new AbstractPopulatedBufferList.BufferFactory<DecodeUnit>() {
+                    @Override
+                    public DecodeUnit createFreeBuffer() {
+                        return new DecodeUnit();
+                    }
 
-            @Override
-            public void cleanupObject(Object o) {
-                DecodeUnit du = (DecodeUnit) o;
+                    @Override
+                    public void cleanupObject(DecodeUnit o) {
 
-                // Disassociate video packets from this DU
-                VideoPacket pkt;
-                while ((pkt = du.removeBackingPacketHead()) != null) {
-                    pkt.dereferencePacket();
-                }
-            }
-        };
+                        // Disassociate video packets from this DU
+                        VideoPacket pkt;
+                        while ((pkt = o.removeBackingPacketHead()) != null) {
+                            pkt.dereferencePacket();
+                        }
+                    }
+                };
 
         if (unsynchronized) {
             decodedUnits = new UnsynchronizedPopulatedBufferList<>(DU_LIMIT, factory);

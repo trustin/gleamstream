@@ -33,15 +33,15 @@ public class AudioDepacketizer {
         } else {
             decodedUnits = new AtomicPopulatedBufferList<>(
                     DU_LIMIT,
-                    new AbstractPopulatedBufferList.BufferFactory() {
+                    new AbstractPopulatedBufferList.BufferFactory<ByteBufferDescriptor>() {
                         @Override
-                        public Object createFreeBuffer() {
+                        public ByteBufferDescriptor createFreeBuffer() {
                             return new ByteBufferDescriptor(
                                     new byte[bufferSizeShorts * 2], 0, bufferSizeShorts * 2);
                         }
 
                         @Override
-                        public void cleanupObject(Object o) {
+                        public void cleanupObject(ByteBufferDescriptor o) {
                             // Nothing to do
                         }
                     });
