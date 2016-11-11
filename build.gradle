@@ -7,7 +7,8 @@ mainClassName = "kr.motd.gleamstream.Main"
 applicationDefaultJvmArgs = [
         '-DGleamStream',
         '-server',
-        '-Xmx512m',
+        '-Xms160m',
+        '-Xmx160m',
         '-XX:+UseG1GC',
         '-XX:+AggressiveOpts'
 ]
