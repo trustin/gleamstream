@@ -24,7 +24,6 @@ public final class MouseButtonPacket extends InputPacket {
     byte mouseButton;
 
     MouseButtonPacket(ConnectionContext context, boolean buttonDown, byte mouseButton) {
-        super(PACKET_TYPE);
         this.mouseButton = mouseButton;
         buttonEventType = buttonDown ? PRESS_EVENT : RELEASE_EVENT;
     }
@@ -35,6 +34,11 @@ public final class MouseButtonPacket extends InputPacket {
         // On Gen 5 servers, the button event codes are incremented by one
         bb.put(ctx.serverGeneration >= SERVER_GENERATION_5 ? (byte) (buttonEventType + 1) : buttonEventType);
         bb.putInt(mouseButton);
+    }
+
+    @Override
+    int packetType() {
+        return PACKET_TYPE;
     }
 
     @Override

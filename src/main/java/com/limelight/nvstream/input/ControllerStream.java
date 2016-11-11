@@ -239,8 +239,8 @@ public class ControllerStream {
         }
     }
 
-    public void sendControllerInput(short controllerNumber, short buttonFlags, byte leftTrigger,
-                                    byte rightTrigger,
+    public void sendControllerInput(short controllerNumber,
+                                    short buttonFlags, byte leftTrigger, byte rightTrigger,
                                     short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
         if (context.serverGeneration == ConnectionContext.SERVER_GENERATION_3) {
             // Use legacy controller packets for generation 3

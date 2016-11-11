@@ -32,10 +32,9 @@ public final class ControllerPacket extends MultiControllerPacket {
     private static final short PACKET_LENGTH = PAYLOAD_LENGTH + HEADER_LENGTH;
 
     ControllerPacket(short buttonFlags, byte leftTrigger, byte rightTrigger,
-                            short leftStickX, short leftStickY,
-                            short rightStickX, short rightStickY) {
-        super(PACKET_TYPE, (short) 0, buttonFlags, leftTrigger, rightTrigger, leftStickX,
-              leftStickY, rightStickX, rightStickY);
+                     short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
+        super((short) 0, buttonFlags, leftTrigger, rightTrigger,
+              leftStickX, leftStickY, rightStickX, rightStickY);
     }
 
     @Override
@@ -50,6 +49,11 @@ public final class ControllerPacket extends MultiControllerPacket {
         bb.putShort(rightStickX);
         bb.putShort(rightStickY);
         bb.put(TAIL);
+    }
+
+    @Override
+    int packetType() {
+        return PACKET_TYPE;
     }
 
     @Override

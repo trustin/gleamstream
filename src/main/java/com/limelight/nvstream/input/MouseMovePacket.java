@@ -18,8 +18,6 @@ final class MouseMovePacket extends InputPacket {
     short deltaY;
 
     MouseMovePacket(short deltaX, short deltaY) {
-        super(PACKET_TYPE);
-
         this.deltaX = deltaX;
         this.deltaY = deltaY;
     }
@@ -32,6 +30,11 @@ final class MouseMovePacket extends InputPacket {
         bb.order(ByteOrder.BIG_ENDIAN);
         bb.putShort(deltaX);
         bb.putShort(deltaY);
+    }
+
+    @Override
+    int packetType() {
+        return PACKET_TYPE;
     }
 
     @Override

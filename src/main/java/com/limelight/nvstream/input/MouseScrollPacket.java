@@ -16,7 +16,6 @@ final class MouseScrollPacket extends InputPacket {
     private final short scroll;
 
     MouseScrollPacket(byte scrollClicks) {
-        super(PACKET_TYPE);
         scroll = (short) (scrollClicks * 120);
     }
 
@@ -31,6 +30,11 @@ final class MouseScrollPacket extends InputPacket {
         bb.putShort(scroll);
 
         bb.putShort((short) 0);
+    }
+
+    @Override
+    int packetType() {
+        return PACKET_TYPE;
     }
 
     @Override

@@ -27,7 +27,6 @@ class MultiControllerPacket extends InputPacket {
 
     MultiControllerPacket(short controllerNumber, short buttonFlags, byte leftTrigger, byte rightTrigger,
                           short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
-        super(PACKET_TYPE);
 
         this.controllerNumber = controllerNumber;
 
@@ -40,25 +39,6 @@ class MultiControllerPacket extends InputPacket {
 
         this.rightStickX = rightStickX;
         this.rightStickY = rightStickY;
-    }
-
-    MultiControllerPacket(int packetType,
-                          short controllerNumber, short buttonFlags, byte leftTrigger, byte rightTrigger,
-                          short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
-        super(packetType);
-
-        this.controllerNumber = controllerNumber;
-
-        this.buttonFlags = buttonFlags;
-        this.leftTrigger = leftTrigger;
-        this.rightTrigger = rightTrigger;
-
-        this.leftStickX = leftStickX;
-        this.leftStickY = leftStickY;
-
-        this.rightStickX = rightStickX;
-        this.rightStickY = rightStickY;
-
     }
 
     @Override
@@ -78,6 +58,11 @@ class MultiControllerPacket extends InputPacket {
         bb.putShort(rightStickX);
         bb.putShort(rightStickY);
         bb.put(TAIL);
+    }
+
+    @Override
+    int packetType() {
+        return PACKET_TYPE;
     }
 
     @Override

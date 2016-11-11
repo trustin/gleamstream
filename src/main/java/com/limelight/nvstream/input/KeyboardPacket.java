@@ -21,7 +21,6 @@ public final class KeyboardPacket extends InputPacket {
     private final byte modifier;
 
     KeyboardPacket(short keyCode, byte keyDirection, byte modifier) {
-        super(PACKET_TYPE);
         this.keyCode = keyCode;
         this.keyDirection = keyDirection;
         this.modifier = modifier;
@@ -37,6 +36,11 @@ public final class KeyboardPacket extends InputPacket {
         bb.put(modifier);
         bb.put((byte) 0);
         bb.put((byte) 0);
+    }
+
+    @Override
+    int packetType() {
+        return PACKET_TYPE;
     }
 
     @Override
