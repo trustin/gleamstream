@@ -1,7 +1,5 @@
 package com.limelight.nvstream.av.video;
 
-import com.limelight.nvstream.av.DecodeUnit;
-
 public abstract class VideoDecoderRenderer {
     public enum VideoFormat {
         Unknown,
@@ -36,7 +34,7 @@ public abstract class VideoDecoderRenderer {
         return 0;
     }
 
-    public void directSubmitDecodeUnit(DecodeUnit du) {
+    public void directSubmitDecodeUnit(VideoDecodeUnit du) {
         throw new UnsupportedOperationException(
                 "CAPABILITY_DIRECT_SUBMIT requires overriding directSubmitDecodeUnit()");
     }

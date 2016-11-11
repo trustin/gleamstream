@@ -17,7 +17,7 @@ import com.beust.jcommander.internal.Console;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
-import com.limelight.nvstream.av.audio.OpusDecoder;
+import com.limelight.nvstream.av.audio.AudioStream;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.enet.EnetConnection;
 import com.limelight.nvstream.http.CryptoProvider;
@@ -40,7 +40,7 @@ public final class Main {
         logger.info("Loading native libraries");
         Library.initialize();
         FFmpegVideoDecoderRenderer.initNativeLibraries();
-        OpusDecoder.initNativeLibraries();
+        AudioStream.initNativeLibraries();
         EnetConnection.initNativeLibraries();
     }
 

@@ -6,9 +6,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.RtpPacket;
-import com.limelight.nvstream.av.RtpPacketFields;
 
-public class VideoPacket implements RtpPacketFields {
+final class VideoPacket implements RtpPacket {
+
+    public static final int FLAG_CONTAINS_PIC_DATA = 0x1;
+    public static final int FLAG_EOF = 0x2;
+    public static final int FLAG_SOF = 0x4;
+
+    public static final int HEADER_SIZE = 16;
+
     private final ByteBufferDescriptor buffer;
     private final ByteBuffer byteBuffer;
     private final boolean useAtomicRefCount;
@@ -25,21 +31,15 @@ public class VideoPacket implements RtpPacketFields {
     private int duRefCount;
 
     // Only for use in DecodeUnit for packet queuing
-    public VideoPacket nextPacket;
+    VideoPacket nextPacket;
 
-    public static final int FLAG_CONTAINS_PIC_DATA = 0x1;
-    public static final int FLAG_EOF = 0x2;
-    public static final int FLAG_SOF = 0x4;
-
-    public static final int HEADER_SIZE = 16;
-
-    public VideoPacket(byte[] buffer, boolean useAtomicRefCount) {
+    VideoPacket(byte[] buffer, boolean useAtomicRefCount) {
         this.buffer = new ByteBufferDescriptor(buffer, 0, buffer.length);
         byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN);
         this.useAtomicRefCount = useAtomicRefCount;
     }
 
-    public void initializeWithLengthNoRtpHeader(int length) {
+    void initializeWithLengthNoRtpHeader(int length) {
         // Back to beginning
         byteBuffer.rewind();
 
@@ -57,7 +57,7 @@ public class VideoPacket implements RtpPacketFields {
         buffer.length = length;
     }
 
-    public void initializeWithLength(int length) {
+    void initializeWithLength(int length) {
         // Read the RTP sequence number field (big endian)
         byteBuffer.position(2);
         rtpSequenceNumber = byteBuffer.getShort();
@@ -79,27 +79,27 @@ public class VideoPacket implements RtpPacketFields {
         buffer.length = length;
     }
 
-    public int getFlags() {
+    int getFlags() {
         return flags;
     }
 
-    public int getFrameIndex() {
+    int getFrameIndex() {
         return frameIndex;
     }
 
-    public int getStreamPacketIndex() {
+    int getStreamPacketIndex() {
         return streamPacketIndex;
     }
 
-    public byte[] getBuffer() {
+    byte[] getBuffer() {
         return buffer.data;
     }
 
-    public ByteBuffer getByteBuffer() {
+    ByteBuffer getByteBuffer() {
         return byteBuffer;
     }
 
-    public void initializePayloadDescriptor(ByteBufferDescriptor bb) {
+    void initializePayloadDescriptor(ByteBufferDescriptor bb) {
         bb.reinitialize(buffer.data, buffer.offset + dataOffset, buffer.length - dataOffset);
     }
 

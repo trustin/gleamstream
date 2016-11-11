@@ -2,19 +2,19 @@ package com.limelight.nvstream.av.audio;
 
 import com.limelight.nvstream.NativeLibraries;
 
-public final class OpusDecoder {
+final class OpusDecoder {
     static {
         NativeLibraries.load("nv_opus_dec");
     }
 
-    public static void initNativeLibraries() {}
+    static void initNativeLibraries() {}
 
-    public static native int init(int sampleRate, int samplesPerChannel, int channelCount, int streams,
-                                  int coupledStreams, byte[] mapping);
+    static native int init(int sampleRate, int samplesPerChannel, int channelCount,
+                           int streams, int coupledStreams, byte[] mapping);
 
-    public static native void destroy();
+    static native void destroy();
 
-    public static native int decode(byte[] indata, int inoff, int inlen, byte[] outpcmdata);
+    static native int decode(byte[] inData, int inOffset, int inLength, byte[] outPcmData);
 
     private OpusDecoder() {}
 }

@@ -17,7 +17,6 @@ import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.ThreadUtil;
 import com.limelight.nvstream.av.ConnectionStatusListener;
-import com.limelight.nvstream.av.DecodeUnit;
 import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
 import com.limelight.nvstream.av.RtpReorderQueue.RtpQueueStatus;
@@ -115,7 +114,7 @@ public class VideoStream {
         firstFrameSocket = null;
     }
 
-    public void setupRtpSession() throws IOException {
+    private void setupRtpSession() throws IOException {
         rtp = DatagramChannel.open();
         rtp.setOption(StandardSocketOptions.SO_RCVBUF, RTP_RECV_BUFFER);
         try {
@@ -126,7 +125,7 @@ public class VideoStream {
         rtp.connect(new InetSocketAddress(context.serverAddress, RTP_PORT));
     }
 
-    public boolean setupDecoderRenderer(VideoDecoderRenderer decRend, int drFlags) {
+    private boolean setupDecoderRenderer(VideoDecoderRenderer decRend, int drFlags) {
         this.decRend = decRend;
 
         depacketizer = new VideoDepacketizer(context, avConnListener, context.streamConfig.getMaxPacketSize());
@@ -193,7 +192,7 @@ public class VideoStream {
             VideoPacket[] ring = new VideoPacket[VIDEO_RING_SIZE];
             VideoPacket queuedPacket;
             int ringIndex = 0;
-            RtpReorderQueue rtpQueue = new RtpReorderQueue(16, MAX_RTP_QUEUE_DELAY_MS);
+            RtpReorderQueue<VideoPacket> rtpQueue = new RtpReorderQueue<>(16, MAX_RTP_QUEUE_DELAY_MS);
             RtpQueueStatus queueStatus;
 
             boolean directSubmit = decRend != null && (decRend.getCapabilities() &
@@ -227,7 +226,7 @@ public class VideoStream {
                         depacketizer.addInputData(ring[ringIndex]);
                     } else if (queueStatus == RtpQueueStatus.QUEUED_PACKETS_READY) {
                         // The packet queue now has packets ready
-                        while ((queuedPacket = (VideoPacket) rtpQueue.getQueuedPacket()) != null) {
+                        while ((queuedPacket = rtpQueue.getQueuedPacket()) != null) {
                             depacketizer.addInputData(queuedPacket);
                             queuedPacket.dereferencePacket();
                         }
@@ -235,7 +234,7 @@ public class VideoStream {
 
                     // If the DR supports direct submission, call the direct submit callback
                     if (directSubmit) {
-                        DecodeUnit du;
+                        VideoDecodeUnit du;
 
                         while ((du = depacketizer.pollNextDecodeUnit()) != null) {
                             decRend.directSubmitDecodeUnit(du);

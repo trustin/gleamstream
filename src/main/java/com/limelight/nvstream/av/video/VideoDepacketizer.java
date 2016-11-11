@@ -7,7 +7,6 @@ import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.TimeHelper;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.ConnectionStatusListener;
-import com.limelight.nvstream.av.DecodeUnit;
 import com.limelight.nvstream.av.SequenceHelper;
 import com.limelight.nvstream.av.buffer.AbstractPopulatedBufferList;
 import com.limelight.nvstream.av.buffer.AtomicPopulatedBufferList;
@@ -46,12 +45,12 @@ public class VideoDepacketizer {
     private int consecutiveFrameDrops;
 
     private static final int DU_LIMIT = 15;
-    private final AbstractPopulatedBufferList<DecodeUnit> decodedUnits;
+    private final AbstractPopulatedBufferList<VideoDecodeUnit> decodedUnits;
 
     private final int frameHeaderOffset;
 
-    public VideoDepacketizer(ConnectionContext context, ConnectionStatusListener controlListener,
-                             int nominalPacketSize) {
+    VideoDepacketizer(ConnectionContext context, ConnectionStatusListener controlListener,
+                      int nominalPacketSize) {
         this.controlListener = controlListener;
         nominalPacketDataLength = nominalPacketSize - VideoPacket.HEADER_SIZE;
 
@@ -81,15 +80,15 @@ public class VideoDepacketizer {
             unsynchronized = true;
         }
 
-        AbstractPopulatedBufferList.BufferFactory<DecodeUnit> factory =
-                new AbstractPopulatedBufferList.BufferFactory<DecodeUnit>() {
+        AbstractPopulatedBufferList.BufferFactory<VideoDecodeUnit> factory =
+                new AbstractPopulatedBufferList.BufferFactory<VideoDecodeUnit>() {
                     @Override
-                    public DecodeUnit createFreeBuffer() {
-                        return new DecodeUnit();
+                    public VideoDecodeUnit createFreeBuffer() {
+                        return new VideoDecodeUnit();
                     }
 
                     @Override
-                    public void cleanupObject(DecodeUnit o) {
+                    public void cleanupObject(VideoDecodeUnit o) {
 
                         // Disassociate video packets from this DU
                         VideoPacket pkt;
@@ -175,24 +174,24 @@ public class VideoDepacketizer {
                     case 0x40: // VPS
                     case 0x42: // SPS
                     case 0x44: // PPS
-                        flags |= DecodeUnit.DU_FLAG_CODEC_CONFIG;
+                        flags |= VideoDecodeUnit.DU_FLAG_CODEC_CONFIG;
                         break;
 
                     // H264
                     case 0x67: // SPS
                     case 0x68: // PPS
-                        flags |= DecodeUnit.DU_FLAG_CODEC_CONFIG;
+                        flags |= VideoDecodeUnit.DU_FLAG_CODEC_CONFIG;
                         break;
                 }
 
                 if (isReferencePictureNalu(
                         cachedSpecialDesc.data[cachedSpecialDesc.offset + cachedSpecialDesc.length])) {
-                    flags |= DecodeUnit.DU_FLAG_SYNC_FRAME;
+                    flags |= VideoDecodeUnit.DU_FLAG_SYNC_FRAME;
                 }
             }
 
             // Construct the video decode unit
-            DecodeUnit du = decodedUnits.pollFreeObject();
+            VideoDecodeUnit du = decodedUnits.pollFreeObject();
             if (du == null) {
                 logger.warn("Video decoder is too slow! Forced to drop decode units");
 
@@ -376,7 +375,7 @@ public class VideoDepacketizer {
                 flags == VideoPacket.FLAG_SOF;
     }
 
-    public void addInputData(VideoPacket packet) {
+    void addInputData(VideoPacket packet) {
         // Load our reassembly descriptor
         packet.initializePayloadDescriptor(cachedReassemblyDesc);
 
@@ -528,15 +527,15 @@ public class VideoDepacketizer {
                 cachedSpecialDesc.data[cachedSpecialDesc.offset + cachedSpecialDesc.length] == 0x40);  // H265 VPS
     }
 
-    public DecodeUnit takeNextDecodeUnit() throws InterruptedException {
+    public VideoDecodeUnit takeNextDecodeUnit() throws InterruptedException {
         return decodedUnits.takePopulatedObject();
     }
 
-    public DecodeUnit pollNextDecodeUnit() {
+    public VideoDecodeUnit pollNextDecodeUnit() {
         return decodedUnits.pollPopulatedObject();
     }
 
-    public void freeDecodeUnit(DecodeUnit du) {
+    public void freeDecodeUnit(VideoDecodeUnit du) {
         decodedUnits.freePopulatedObject(du);
     }
 }

@@ -16,11 +16,11 @@ import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.ThreadUtil;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
-import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.RtpReorderQueue;
 import com.limelight.nvstream.av.RtpReorderQueue.RtpQueueStatus;
 
-public class AudioStream {
+public final class AudioStream {
+
     private static final Logger logger = LoggerFactory.getLogger(AudioStream.class);
 
     private static final int RTP_PORT = 48000;
@@ -30,6 +30,10 @@ public class AudioStream {
 
     private static final int RTP_RECV_BUFFER = 64 * 1024;
     private static final int MAX_PACKET_SIZE = 250;
+
+    public static void initNativeLibraries() {
+        OpusDecoder.initNativeLibraries();
+    }
 
     private DatagramChannel rtp;
 
@@ -176,8 +180,8 @@ public class AudioStream {
         Thread t = new Thread(() -> {
             byte[] buffer = new byte[MAX_PACKET_SIZE];
             ByteBuffer packet = ByteBuffer.wrap(buffer);
-            RtpPacket queuedPacket, rtpPacket = new RtpPacket(buffer);
-            RtpReorderQueue rtpQueue = new RtpReorderQueue();
+            AudioPacket queuedPacket, rtpPacket = new AudioPacket(buffer);
+            RtpReorderQueue<AudioPacket> rtpQueue = new RtpReorderQueue<>();
             RtpQueueStatus queueStatus;
 
             try {
@@ -204,12 +208,12 @@ public class AudioStream {
                             // The queue consumed our packet, so we must allocate a new one
                             buffer = new byte[MAX_PACKET_SIZE];
                             packet = ByteBuffer.wrap(buffer);
-                            rtpPacket = new RtpPacket(buffer);
+                            rtpPacket = new AudioPacket(buffer);
                         }
 
                         // If packets are ready, pull them and send them to the depacketizer
                         if (queueStatus == RtpQueueStatus.QUEUED_PACKETS_READY) {
-                            while ((queuedPacket = (RtpPacket) rtpQueue.getQueuedPacket()) != null) {
+                            while ((queuedPacket = rtpQueue.getQueuedPacket()) != null) {
                                 depacketizer.decodeInputData(queuedPacket);
                                 queuedPacket.dereferencePacket();
                             }

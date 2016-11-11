@@ -4,12 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.av.ByteBufferDescriptor;
-import com.limelight.nvstream.av.RtpPacket;
 import com.limelight.nvstream.av.SequenceHelper;
 import com.limelight.nvstream.av.buffer.AbstractPopulatedBufferList;
 import com.limelight.nvstream.av.buffer.AtomicPopulatedBufferList;
 
-public class AudioDepacketizer {
+final class AudioDepacketizer {
 
     private static final Logger logger = LoggerFactory.getLogger(AudioDepacketizer.class);
 
@@ -26,7 +25,7 @@ public class AudioDepacketizer {
     // Sequencing state
     private short lastSequenceNumber;
 
-    public AudioDepacketizer(AudioRenderer directSubmitRenderer, final int bufferSizeShorts) {
+    AudioDepacketizer(AudioRenderer directSubmitRenderer, final int bufferSizeShorts) {
         this.directSubmitRenderer = directSubmitRenderer;
         if (directSubmitRenderer != null) {
             directSubmitData = new byte[bufferSizeShorts * 2];
@@ -81,7 +80,7 @@ public class AudioDepacketizer {
         }
     }
 
-    public void decodeInputData(RtpPacket packet) {
+    void decodeInputData(AudioPacket packet) {
         short seq = packet.getRtpSequenceNumber();
 
         // Toss out the current NAL if we receive a packet that is
@@ -107,11 +106,11 @@ public class AudioDepacketizer {
         decodeData(cachedDesc.data, cachedDesc.offset, cachedDesc.length);
     }
 
-    public ByteBufferDescriptor getNextDecodedData() throws InterruptedException {
+    ByteBufferDescriptor getNextDecodedData() throws InterruptedException {
         return decodedUnits.takePopulatedObject();
     }
 
-    public void freeDecodedData(ByteBufferDescriptor data) {
+    void freeDecodedData(ByteBufferDescriptor data) {
         decodedUnits.freePopulatedObject(data);
     }
 }

@@ -9,13 +9,13 @@ import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.TimeHelper;
 
-public final class RtpReorderQueue {
+public final class RtpReorderQueue<T extends RtpPacket> {
 
     private static final Logger logger = LoggerFactory.getLogger(RtpReorderQueue.class);
 
     private final int maxSize;
     private final int maxQueueTime;
-    private final Deque<RtpQueueEntry> queue;
+    private final Deque<RtpQueueEntry<T>> queue;
 
     private short nextRtpSequenceNumber;
 
@@ -46,7 +46,7 @@ public final class RtpReorderQueue {
         nextRtpSequenceNumber = Short.MAX_VALUE;
     }
 
-    private boolean queuePacket(boolean head, RtpPacketFields packet) {
+    private boolean queuePacket(boolean head, T packet) {
         short seq = packet.getRtpSequenceNumber();
 
         if (nextRtpSequenceNumber != Short.MAX_VALUE) {
@@ -56,14 +56,14 @@ public final class RtpReorderQueue {
             }
 
             // Don't queue duplicates either
-            for (RtpQueueEntry existingEntry : queue) {
+            for (RtpQueueEntry<T> existingEntry : queue) {
                 if (existingEntry.sequenceNumber == seq) {
                     return false;
                 }
             }
         }
 
-        RtpQueueEntry entry = new RtpQueueEntry(packet, seq, TimeHelper.getMonotonicMillis());
+        RtpQueueEntry<T> entry = new RtpQueueEntry<>(packet, seq, TimeHelper.getMonotonicMillis());
         if (oldestQueuedTime == Long.MAX_VALUE) {
             oldestQueuedTime = entry.queueTime;
         }
@@ -82,22 +82,22 @@ public final class RtpReorderQueue {
 
     private void updateOldestQueued() {
         oldestQueuedTime = Long.MAX_VALUE;
-        for (RtpQueueEntry entry : queue) {
+        for (RtpQueueEntry<T> entry : queue) {
             if (entry.queueTime < oldestQueuedTime) {
                 oldestQueuedTime = entry.queueTime;
             }
         }
     }
 
-    private RtpQueueEntry getEntryByLowestSeq() {
+    private RtpQueueEntry<T> getEntryByLowestSeq() {
         if (queue.isEmpty()) {
             return null;
         }
 
-        RtpQueueEntry lowestSeqEntry = queue.getFirst();
+        RtpQueueEntry<T> lowestSeqEntry = queue.getFirst();
         short nextSeq = lowestSeqEntry.sequenceNumber;
 
-        for (RtpQueueEntry entry : queue) {
+        for (RtpQueueEntry<T> entry : queue) {
             if (SequenceHelper.isBeforeSigned(entry.sequenceNumber, nextSeq, true)) {
                 lowestSeqEntry = entry;
                 nextSeq = entry.sequenceNumber;
@@ -111,7 +111,7 @@ public final class RtpReorderQueue {
         return lowestSeqEntry;
     }
 
-    private RtpQueueEntry validateQueueConstraints() {
+    private RtpQueueEntry<T> validateQueueConstraints() {
         if (queue.isEmpty()) {
             return null;
         }
@@ -141,7 +141,7 @@ public final class RtpReorderQueue {
         }
     }
 
-    public RtpQueueStatus addPacket(RtpPacketFields packet) {
+    public RtpQueueStatus addPacket(T packet) {
         if (nextRtpSequenceNumber != Short.MAX_VALUE &&
             SequenceHelper.isBeforeSigned(packet.getRtpSequenceNumber(), nextRtpSequenceNumber, false)) {
             // Reject packets behind our current sequence number
@@ -164,7 +164,7 @@ public final class RtpReorderQueue {
             }
         } else {
             // Validate that the queue remains within our constraints
-            RtpQueueEntry lowestEntry = validateQueueConstraints();
+            RtpQueueEntry<T> lowestEntry = validateQueueConstraints();
 
             // If the queue is now empty after validating queue constraints,
             // this packet can be returned immediately
@@ -196,13 +196,13 @@ public final class RtpReorderQueue {
 
     // This function returns a referenced packet. The caller must dereference
     // the packet when it is finished.
-    public RtpPacketFields getQueuedPacket() {
-        RtpQueueEntry queuedEntry = null;
+    public T getQueuedPacket() {
+        RtpQueueEntry<T> queuedEntry = null;
 
         // Find the matching entry
-        Iterator<RtpQueueEntry> i = queue.iterator();
+        Iterator<RtpQueueEntry<T>> i = queue.iterator();
         while (i.hasNext()) {
-            RtpQueueEntry entry = i.next();
+            RtpQueueEntry<T> entry = i.next();
             if (entry.sequenceNumber == nextRtpSequenceNumber) {
                 nextRtpSequenceNumber++;
                 queuedEntry = entry;
@@ -225,12 +225,12 @@ public final class RtpReorderQueue {
         return queuedEntry.packet;
     }
 
-    private static class RtpQueueEntry {
-        final RtpPacketFields packet;
+    private static class RtpQueueEntry<T> {
+        final T packet;
         final short sequenceNumber;
         final long queueTime;
 
-        RtpQueueEntry(RtpPacketFields packet, short sequenceNumber, long queueTime) {
+        RtpQueueEntry(T packet, short sequenceNumber, long queueTime) {
             this.packet = packet;
             this.sequenceNumber = sequenceNumber;
             this.queueTime = queueTime;

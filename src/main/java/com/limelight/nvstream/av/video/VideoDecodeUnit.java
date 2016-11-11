@@ -1,8 +1,9 @@
-package com.limelight.nvstream.av;
+package com.limelight.nvstream.av.video;
 
-import com.limelight.nvstream.av.video.VideoPacket;
+import com.limelight.nvstream.av.ByteBufferDescriptor;
 
-public class DecodeUnit {
+public final class VideoDecodeUnit {
+
     public static final int DU_FLAG_CODEC_CONFIG = 0x1;
     public static final int DU_FLAG_SYNC_FRAME = 0x2;
 
@@ -13,8 +14,10 @@ public class DecodeUnit {
     private int flags;
     private VideoPacket backingPacketHead;
 
-    public void initialize(ByteBufferDescriptor bufferHead, int dataLength,
-                           int frameNumber, long receiveTimestamp, int flags, VideoPacket backingPacketHead) {
+    VideoDecodeUnit() {}
+
+    void initialize(ByteBufferDescriptor bufferHead, int dataLength,
+                    int frameNumber, long receiveTimestamp, int flags, VideoPacket backingPacketHead) {
         this.bufferHead = bufferHead;
         this.dataLength = dataLength;
         this.frameNumber = frameNumber;
@@ -44,7 +47,7 @@ public class DecodeUnit {
     }
 
     // Internal use only
-    public VideoPacket removeBackingPacketHead() {
+    VideoPacket removeBackingPacketHead() {
         VideoPacket pkt = backingPacketHead;
         if (pkt != null) {
             backingPacketHead = pkt.nextPacket;

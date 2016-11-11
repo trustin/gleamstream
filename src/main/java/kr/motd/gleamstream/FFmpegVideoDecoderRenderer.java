@@ -35,7 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.av.ByteBufferDescriptor;
-import com.limelight.nvstream.av.DecodeUnit;
+import com.limelight.nvstream.av.video.VideoDecodeUnit;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.av.video.VideoDepacketizer;
 
@@ -131,7 +131,7 @@ final class FFmpegVideoDecoderRenderer extends VideoDecoderRenderer {
     @Override
     public boolean start(final VideoDepacketizer depacketizer) {
         decoderThread = new Thread(() -> {
-            DecodeUnit du;
+            VideoDecodeUnit du;
             while (!dying) {
                 try {
                     du = depacketizer.takeNextDecodeUnit();
@@ -182,7 +182,7 @@ final class FFmpegVideoDecoderRenderer extends VideoDecoderRenderer {
      *
      * @param decodeUnit the unit to be decoded
      */
-    public void submitDecodeUnit(DecodeUnit decodeUnit) {
+    public void submitDecodeUnit(VideoDecodeUnit decodeUnit) {
 
         if (decoderBuffer.capacity() < decodeUnit.getDataLength() + AV_INPUT_BUFFER_PADDING_SIZE) {
             int newCapacity = (int) (1.15f * decodeUnit.getDataLength()) + AV_INPUT_BUFFER_PADDING_SIZE;
