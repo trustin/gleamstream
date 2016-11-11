@@ -7,10 +7,8 @@ import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.TimeHelper;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.ConnectionStatusListener;
+import com.limelight.nvstream.av.DecodedUnitPool;
 import com.limelight.nvstream.av.SequenceHelper;
-import com.limelight.nvstream.av.buffer.AbstractPopulatedBufferList;
-import com.limelight.nvstream.av.buffer.AtomicPopulatedBufferList;
-import com.limelight.nvstream.av.buffer.UnsynchronizedPopulatedBufferList;
 
 public class VideoDepacketizer {
 
@@ -45,7 +43,7 @@ public class VideoDepacketizer {
     private int consecutiveFrameDrops;
 
     private static final int DU_LIMIT = 15;
-    private final AbstractPopulatedBufferList<VideoDecodeUnit> decodedUnits;
+    private final DecodedUnitPool<VideoDecodeUnit> decodedUnits;
 
     private final int frameHeaderOffset;
 
@@ -68,41 +66,28 @@ public class VideoDepacketizer {
             frameHeaderOffset = 0;
         }
 
-        boolean unsynchronized;
+        final boolean threadSafe;
         if (context.videoDecoderRenderer != null) {
             int videoCaps = context.videoDecoderRenderer.getCapabilities();
             strictIdrFrameWait =
                     (videoCaps & VideoDecoderRenderer.CAPABILITY_REFERENCE_FRAME_INVALIDATION) == 0;
-            unsynchronized = (videoCaps & VideoDecoderRenderer.CAPABILITY_DIRECT_SUBMIT) != 0;
+            threadSafe = (videoCaps & VideoDecoderRenderer.CAPABILITY_DIRECT_SUBMIT) == 0;
         } else {
             // If there's no renderer, it doesn't matter if we synchronize or wait for IDRs
             strictIdrFrameWait = false;
-            unsynchronized = true;
+            threadSafe = false;
         }
 
-        AbstractPopulatedBufferList.BufferFactory<VideoDecodeUnit> factory =
-                new AbstractPopulatedBufferList.BufferFactory<VideoDecodeUnit>() {
-                    @Override
-                    public VideoDecodeUnit createFreeBuffer() {
-                        return new VideoDecodeUnit();
+        decodedUnits = new DecodedUnitPool<>(
+                DU_LIMIT, threadSafe,
+                VideoDecodeUnit::new,
+                du -> {
+                    // Disassociate video packets from this DU
+                    VideoPacket pkt;
+                    while ((pkt = du.removeBackingPacketHead()) != null) {
+                        pkt.dereferencePacket();
                     }
-
-                    @Override
-                    public void cleanupObject(VideoDecodeUnit o) {
-
-                        // Disassociate video packets from this DU
-                        VideoPacket pkt;
-                        while ((pkt = o.removeBackingPacketHead()) != null) {
-                            pkt.dereferencePacket();
-                        }
-                    }
-                };
-
-        if (unsynchronized) {
-            decodedUnits = new UnsynchronizedPopulatedBufferList<>(DU_LIMIT, factory);
-        } else {
-            decodedUnits = new AtomicPopulatedBufferList<>(DU_LIMIT, factory);
-        }
+                });
     }
 
     private void dropFrameState() {
@@ -191,7 +176,7 @@ public class VideoDepacketizer {
             }
 
             // Construct the video decode unit
-            VideoDecodeUnit du = decodedUnits.pollFreeObject();
+            VideoDecodeUnit du = decodedUnits.pollFree();
             if (du == null) {
                 logger.warn("Video decoder is too slow! Forced to drop decode units");
 
@@ -201,7 +186,7 @@ public class VideoDepacketizer {
                 waitingForIdrFrame = true;
 
                 // Remove existing frames
-                decodedUnits.clearPopulatedObjects();
+                decodedUnits.clearAllDecoded();
 
                 // Clear frame state and wait for an IDR
                 dropFrameState();
@@ -218,7 +203,7 @@ public class VideoDepacketizer {
             controlListener.connectionReceivedCompleteFrame(frameNumber);
 
             // Submit the DU to the consumer
-            decodedUnits.addPopulatedObject(du);
+            decodedUnits.addDecoded(du);
 
             // Clear old state
             cleanupFrameState();
@@ -528,14 +513,14 @@ public class VideoDepacketizer {
     }
 
     public VideoDecodeUnit takeNextDecodeUnit() throws InterruptedException {
-        return decodedUnits.takePopulatedObject();
+        return decodedUnits.takeDecoded();
     }
 
     public VideoDecodeUnit pollNextDecodeUnit() {
-        return decodedUnits.pollPopulatedObject();
+        return decodedUnits.pollDecoded();
     }
 
     public void freeDecodeUnit(VideoDecodeUnit du) {
-        decodedUnits.freePopulatedObject(du);
+        decodedUnits.freeDecoded(du);
     }
 }

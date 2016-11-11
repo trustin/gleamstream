@@ -4,16 +4,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.av.ByteBufferDescriptor;
+import com.limelight.nvstream.av.DecodedUnitPool;
 import com.limelight.nvstream.av.SequenceHelper;
-import com.limelight.nvstream.av.buffer.AbstractPopulatedBufferList;
-import com.limelight.nvstream.av.buffer.AtomicPopulatedBufferList;
 
 final class AudioDepacketizer {
 
     private static final Logger logger = LoggerFactory.getLogger(AudioDepacketizer.class);
 
     private static final int DU_LIMIT = 30;
-    private AbstractPopulatedBufferList<ByteBufferDescriptor> decodedUnits;
+    private DecodedUnitPool<ByteBufferDescriptor> decodedUnits;
 
     // Direct submit state
     private final AudioRenderer directSubmitRenderer;
@@ -30,20 +29,10 @@ final class AudioDepacketizer {
         if (directSubmitRenderer != null) {
             directSubmitData = new byte[bufferSizeShorts * 2];
         } else {
-            decodedUnits = new AtomicPopulatedBufferList<>(
-                    DU_LIMIT,
-                    new AbstractPopulatedBufferList.BufferFactory<ByteBufferDescriptor>() {
-                        @Override
-                        public ByteBufferDescriptor createFreeBuffer() {
-                            return new ByteBufferDescriptor(
-                                    new byte[bufferSizeShorts * 2], 0, bufferSizeShorts * 2);
-                        }
-
-                        @Override
-                        public void cleanupObject(ByteBufferDescriptor o) {
-                            // Nothing to do
-                        }
-                    });
+            decodedUnits = new DecodedUnitPool<>(
+                    DU_LIMIT, true,
+                    () -> new ByteBufferDescriptor(
+                            new byte[bufferSizeShorts * 2], 0, bufferSizeShorts * 2));
         }
     }
 
@@ -55,11 +44,11 @@ final class AudioDepacketizer {
             bb = null;
             decodeLen = OpusDecoder.decode(data, off, len, directSubmitData);
         } else {
-            bb = decodedUnits.pollFreeObject();
+            bb = decodedUnits.pollFree();
             if (bb == null) {
                 logger.warn("Audio player too slow! Forced to drop decoded samples");
-                decodedUnits.clearPopulatedObjects();
-                bb = decodedUnits.pollFreeObject();
+                decodedUnits.clearAllDecoded();
+                bb = decodedUnits.pollFree();
                 if (bb == null) {
                     logger.error("Audio player is leaking buffers!");
                     return;
@@ -73,10 +62,10 @@ final class AudioDepacketizer {
                 directSubmitRenderer.playDecodedAudio(directSubmitData, 0, decodeLen);
             } else {
                 bb.length = decodeLen;
-                decodedUnits.addPopulatedObject(bb);
+                decodedUnits.addDecoded(bb);
             }
         } else if (directSubmitRenderer == null) {
-            decodedUnits.freePopulatedObject(bb);
+            decodedUnits.freeDecoded(bb);
         }
     }
 
@@ -107,10 +96,10 @@ final class AudioDepacketizer {
     }
 
     ByteBufferDescriptor getNextDecodedData() throws InterruptedException {
-        return decodedUnits.takePopulatedObject();
+        return decodedUnits.takeDecoded();
     }
 
     void freeDecodedData(ByteBufferDescriptor data) {
-        decodedUnits.freePopulatedObject(data);
+        decodedUnits.freeDecoded(data);
     }
 }
