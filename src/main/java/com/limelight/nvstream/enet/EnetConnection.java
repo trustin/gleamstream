@@ -29,9 +29,7 @@ public final class EnetConnection implements Closeable {
 
         conn.enetPeer = connectToPeer(conn.enetClient, host, port, timeout);
         if (conn.enetPeer == 0) {
-            try {
-                conn.close();
-            } catch (IOException e) {}
+            conn.close();
             throw new IOException("Unable to connect to UDP port " + port);
         }
 
@@ -40,7 +38,9 @@ public final class EnetConnection implements Closeable {
 
     public void pumpSocket() throws IOException {
         int ret;
-        while ((ret = readPacket(enetClient, null, 0, 0)) > 0) { ; }
+        while ((ret = readPacket(enetClient, null, 0, 0)) > 0) {
+            continue;
+        }
         if (ret < 0) {
             throw new IOException("ENet connection failed");
         }
@@ -80,14 +80,18 @@ public final class EnetConnection implements Closeable {
         }
     }
 
-    public void writePacket(ByteBuffer buffer) throws IOException {
-        if (!writePacket(enetClient, enetPeer, buffer.array(), buffer.limit(), ENET_PACKET_FLAG_RELIABLE)) {
+    public void writePacket(byte[] data) throws IOException {
+        writePacket(data, data.length);
+    }
+
+    public void writePacket(byte[] data, int length) throws IOException {
+        if (!writePacket(enetClient, enetPeer, data, length, ENET_PACKET_FLAG_RELIABLE)) {
             throw new IOException("Failed to send ENet packet");
         }
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         if (enetPeer != 0) {
             disconnectPeer(enetPeer);
             enetPeer = 0;

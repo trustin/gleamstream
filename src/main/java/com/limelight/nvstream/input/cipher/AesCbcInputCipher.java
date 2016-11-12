@@ -27,7 +27,7 @@ public final class AesCbcInputCipher implements InputCipher {
         return (plaintextSize + 15) / 16 * 16;
     }
 
-    private int inPlacePadData(byte[] data, int length) {
+    private int inPlacePadData(byte[] data, int offset, int length) {
         // This implements the PKCS7 padding algorithm
 
         if (length % 16 == 0) {
@@ -38,7 +38,7 @@ public final class AesCbcInputCipher implements InputCipher {
         int paddedLength = getEncryptedSize(length);
         byte paddingByte = (byte) (16 - length % 16);
 
-        for (int i = length; i < paddedLength; i++) {
+        for (int i = offset + length; i < offset + paddedLength; i++) {
             data[i] = paddingByte;
         }
 
@@ -46,10 +46,10 @@ public final class AesCbcInputCipher implements InputCipher {
     }
 
     @Override
-    public void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset) {
-        int encryptedLength = inPlacePadData(inputData, inputLength);
+    public void encrypt(byte[] inputData, int inputOffset, int inputLength, byte[] outputData, int outputOffset) {
+        int encryptedLength = inPlacePadData(inputData, inputOffset, inputLength);
         try {
-            cipher.update(inputData, 0, encryptedLength, outputData, outputOffset);
+            cipher.update(inputData, inputOffset, encryptedLength, outputData, outputOffset);
         } catch (ShortBufferException e) {
             throw panic(e);
         }

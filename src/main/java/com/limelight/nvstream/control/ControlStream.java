@@ -13,6 +13,7 @@ import java.util.concurrent.LinkedTransferQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.io.ByteStreams;
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.ThreadUtil;
@@ -168,6 +169,8 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private Socket s;
     private InputStream in;
     private OutputStream out;
+    private final byte[] packetSendBuf = new byte[256];
+    private final byte[] packetRecvBuf = new byte[4];
 
     private Thread lossStatsThread;
     private Thread resyncThread;
@@ -226,23 +229,36 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         }
     }
 
-    private synchronized void sendPacket(NvCtlPacket packet) throws IOException {
+    private synchronized void sendPacket(
+            short type, byte[] payload, int offset, int length) throws IOException {
         // Prevent multiple clients from writing to the stream at the same time
         if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
             enetConnection.pumpSocket();
-            packet.write(enetConnection);
+
+            packetSendBuf[0] = (byte) (type & 0xFF);
+            packetSendBuf[1] = (byte) (type >>> 8 & 0xFF);
+            System.arraycopy(payload, offset, packetSendBuf, 2, length);
+            enetConnection.writePacket(packetSendBuf, length + 2);
         } else {
-            packet.write(out);
+            packetSendBuf[0] = (byte) (type & 0xFF);
+            packetSendBuf[1] = (byte) (type >>> 8 & 0xFF);
+            packetSendBuf[2] = (byte) (length & 0xFF);
+            packetSendBuf[3] = (byte) (length >>> 8 & 0xFF);
+            System.arraycopy(payload, offset, packetSendBuf, 4, length);
+            out.write(packetSendBuf, 0, length + 4);
             out.flush();
         }
     }
 
-    private synchronized void sendAndDiscardReply(NvCtlPacket packet) throws IOException {
-        sendPacket(packet);
+    private synchronized void sendAndDiscardReply(
+            short type, byte[] payload, int offset, int length) throws IOException {
+        sendPacket(type, payload, offset, length);
         if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
             enetConnection.readPacket(0, CONTROL_TIMEOUT);
         } else {
-            new NvCtlResponse(in);
+            ByteStreams.readFully(in, packetRecvBuf, 0, 4);
+            final int recvLength = packetRecvBuf[2] & 0xFF | (packetRecvBuf[3] & 0xFF) << 8;
+            ByteStreams.skipFully(in, recvLength);
         }
     }
 
@@ -256,13 +272,13 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         bb.putInt(0);
         bb.putInt(0x14);
 
-        sendPacket(new NvCtlPacket(packetTypes[IDX_LOSS_STATS],
-                                   payloadLengths[IDX_LOSS_STATS], bb.array()));
+        sendPacket(packetTypes[IDX_LOSS_STATS],
+                   bb.array(), bb.arrayOffset(), payloadLengths[IDX_LOSS_STATS]);
     }
 
     @Override
-    public void sendInputPacket(byte[] data, short length) throws IOException {
-        sendPacket(new NvCtlPacket(packetTypes[IDX_INPUT_DATA], length, data));
+    public void sendInputPacket(byte[] data, int offset, int length) throws IOException {
+        sendPacket(packetTypes[IDX_INPUT_DATA], data, offset, length);
     }
 
     public void abort() {
@@ -283,11 +299,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         ThreadUtil.stop(lossStatsThread, resyncThread);
 
         if (enetConnection != null) {
-            try {
-                enetConnection.close();
-            } catch (IOException e) {
-                logger.warn("Failed to close the control stream", e);
-            }
+            enetConnection.close();
         }
     }
 
@@ -381,9 +393,9 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     }
 
     private void doStartA() throws IOException {
-        sendAndDiscardReply(new NvCtlPacket(packetTypes[IDX_START_A],
-                                            (short) preconstructedPayloads[IDX_START_A].length,
-                                            preconstructedPayloads[IDX_START_A]));
+        sendAndDiscardReply(packetTypes[IDX_START_A],
+                            preconstructedPayloads[IDX_START_A], 0,
+                            preconstructedPayloads[IDX_START_A].length);
     }
 
     private void doStartB() throws IOException {
@@ -397,12 +409,12 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             payload.putInt(0);
             payload.putInt(0xa);
 
-            sendAndDiscardReply(new NvCtlPacket(packetTypes[IDX_START_B],
-                                                payloadLengths[IDX_START_B], payload.array()));
+            sendAndDiscardReply(packetTypes[IDX_START_B],
+                                payload.array(), 0, payloadLengths[IDX_START_B]);
         } else {
-            sendAndDiscardReply(new NvCtlPacket(packetTypes[IDX_START_B],
-                                                (short) preconstructedPayloads[IDX_START_B].length,
-                                                preconstructedPayloads[IDX_START_B]));
+            sendAndDiscardReply(packetTypes[IDX_START_B],
+                                preconstructedPayloads[IDX_START_B], 0,
+                                preconstructedPayloads[IDX_START_B].length);
         }
     }
 
@@ -431,12 +443,13 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             }
             conf.putLong(0);
 
-            sendAndDiscardReply(new NvCtlPacket(packetTypes[IDX_INVALIDATE_REF_FRAMES],
-                                                payloadLengths[IDX_INVALIDATE_REF_FRAMES], conf.array()));
+            sendAndDiscardReply(packetTypes[IDX_INVALIDATE_REF_FRAMES],
+                                conf.array(), conf.arrayOffset(),
+                                payloadLengths[IDX_INVALIDATE_REF_FRAMES]);
         } else {
-            sendAndDiscardReply(new NvCtlPacket(packetTypes[IDX_REQUEST_IDR_FRAME],
-                                                (short) preconstructedPayloads[IDX_REQUEST_IDR_FRAME].length,
-                                                preconstructedPayloads[IDX_REQUEST_IDR_FRAME]));
+            sendAndDiscardReply(packetTypes[IDX_REQUEST_IDR_FRAME],
+                                preconstructedPayloads[IDX_REQUEST_IDR_FRAME], 0,
+                                preconstructedPayloads[IDX_REQUEST_IDR_FRAME].length);
         }
 
         logger.warn("IDR frame request sent");
@@ -452,142 +465,11 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         conf.putLong(nextSuccessfulFrame);
         conf.putLong(0);
 
-        sendAndDiscardReply(new NvCtlPacket(packetTypes[IDX_INVALIDATE_REF_FRAMES],
-                                            payloadLengths[IDX_INVALIDATE_REF_FRAMES], conf.array()));
+        sendAndDiscardReply(packetTypes[IDX_INVALIDATE_REF_FRAMES],
+                            conf.array(), conf.arrayOffset(),
+                            payloadLengths[IDX_INVALIDATE_REF_FRAMES]);
 
         logger.warn("Reference frame invalidation sent");
-    }
-
-    static class NvCtlPacket {
-
-        private static final byte[] EMPTY_PAYLOAD = new byte[0];
-
-        private static final ByteBuffer headerBuffer =
-                ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
-        private static final ByteBuffer serializationBuffer =
-                ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN);
-
-        private final short type;
-        private final short paylen;
-        private final byte[] payload;
-
-        NvCtlPacket(InputStream in) throws IOException {
-            // Use the class's static header buffer for parsing the header
-            synchronized (headerBuffer) {
-                int offset = 0;
-                byte[] header = headerBuffer.array();
-                do {
-                    int bytesRead = in.read(header, offset, header.length - offset);
-                    if (bytesRead < 0) {
-                        break;
-                    }
-                    offset += bytesRead;
-                } while (offset != header.length);
-
-                if (offset != header.length) {
-                    throw new IOException("Socket closed prematurely");
-                }
-
-                headerBuffer.rewind();
-                type = headerBuffer.getShort();
-                paylen = headerBuffer.getShort();
-            }
-
-            if (paylen != 0) {
-                payload = new byte[paylen];
-
-                int offset = 0;
-                do {
-                    int bytesRead = in.read(payload, offset, payload.length - offset);
-                    if (bytesRead < 0) {
-                        break;
-                    }
-                    offset += bytesRead;
-                } while (offset != payload.length);
-
-                if (offset != payload.length) {
-                    throw new IOException("Socket closed prematurely");
-                }
-            } else {
-                payload = EMPTY_PAYLOAD;
-            }
-        }
-
-        NvCtlPacket(byte[] packet) {
-            synchronized (headerBuffer) {
-                headerBuffer.rewind();
-
-                headerBuffer.put(packet, 0, 4);
-                headerBuffer.rewind();
-
-                type = headerBuffer.getShort();
-                paylen = headerBuffer.getShort();
-            }
-
-            if (paylen != 0) {
-                payload = new byte[paylen];
-                System.arraycopy(packet, 4, payload, 0, paylen);
-            } else {
-                payload = EMPTY_PAYLOAD;
-            }
-        }
-
-        NvCtlPacket(short type, short paylen, byte[] payload) {
-            this.type = type;
-            this.paylen = paylen;
-            this.payload = payload;
-        }
-
-        public void write(OutputStream out) throws IOException {
-            // Use the class's serialization buffer to construct the wireform to send
-            synchronized (serializationBuffer) {
-                serializationBuffer.rewind();
-                serializationBuffer.limit(serializationBuffer.capacity());
-                serializationBuffer.putShort(type);
-                serializationBuffer.putShort(paylen);
-                serializationBuffer.put(payload, 0, paylen);
-
-                out.write(serializationBuffer.array(), 0, serializationBuffer.position());
-            }
-        }
-
-        public void write(EnetConnection conn) throws IOException {
-            // Use the class's serialization buffer to construct the wireform to send
-            synchronized (serializationBuffer) {
-                serializationBuffer.rewind();
-                serializationBuffer.limit(serializationBuffer.capacity());
-                serializationBuffer.putShort(type);
-                serializationBuffer.put(payload, 0, paylen);
-                serializationBuffer.limit(serializationBuffer.position());
-
-                conn.writePacket(serializationBuffer);
-            }
-        }
-    }
-
-    static class NvCtlResponse extends NvCtlPacket {
-
-        private short status;
-
-        NvCtlResponse(InputStream in) throws IOException {
-            super(in);
-        }
-
-        NvCtlResponse(short type, short paylen, byte[] payload) {
-            super(type, paylen, payload);
-        }
-
-        NvCtlResponse(byte[] payload) {
-            super(payload);
-        }
-
-        public void setStatusCode(short status) {
-            this.status = status;
-        }
-
-        public short getStatusCode() {
-            return status;
-        }
     }
 
     private void resyncConnection(int firstLostFrame, int nextSuccessfulFrame) {

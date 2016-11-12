@@ -32,7 +32,8 @@ public class AesGcmInputCipher implements InputCipher {
     }
 
     @Override
-    public final void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset) {
+    public final void encrypt(byte[] inputData, int inputOffset, int inputLength,
+                              byte[] outputData, int outputOffset) {
         // Reconstructing the cipher on every invocation really sucks but we have to do it
         // because of the way NVIDIA is using GCM where each message is tagged. Java doesn't
         // have an easy way that I know of to get a tag out mid-stream.
@@ -40,7 +41,7 @@ public class AesGcmInputCipher implements InputCipher {
             final Cipher cipher = newCipher();
             cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_LENGTH * 8, iv, ivOffset, ivLength));
 
-            final int outLen = cipher.doFinal(inputData, 0, inputLength, rawCipherOut);
+            final int outLen = cipher.doFinal(inputData, inputOffset, inputLength, rawCipherOut);
             assert outLen == getEncryptedSize(inputLength);
 
             // This is also non-ideal. Java gives us <ciphertext><tag> but we want to send <tag><ciphertext>

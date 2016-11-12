@@ -94,11 +94,11 @@ public class RtspConnection {
         payload = m.toWirePayloadOnly();
 
         // Send the RTSP header
-        enetConnection.writePacket(ByteBuffer.wrap(header));
+        enetConnection.writePacket(header);
 
         // Send payload in a separate packet if there's payload on this
         if (payload != null) {
-            enetConnection.writePacket(ByteBuffer.wrap(payload));
+            enetConnection.writePacket(payload);
         }
 
         // Wait for a response

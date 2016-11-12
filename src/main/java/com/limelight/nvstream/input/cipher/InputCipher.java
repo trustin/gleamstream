@@ -5,5 +5,5 @@ import javax.crypto.SecretKey;
 public interface InputCipher {
     void initialize(SecretKey key, byte[] iv, int ivOffset, int ivLength);
     int getEncryptedSize(int plaintextSize);
-    void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset);
+    void encrypt(byte[] inputData, int inputOffset, int inputLength, byte[] outputData, int outputOffset);
 }

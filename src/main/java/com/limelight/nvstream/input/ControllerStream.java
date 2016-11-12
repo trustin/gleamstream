@@ -214,7 +214,8 @@ public class ControllerStream {
         sendBuffer.rewind();
         sendBuffer.putInt(paddedLength);
         try {
-            cipher.encrypt(stagingBuffer.array(), packetLen, sendBuffer.array(), 4);
+            cipher.encrypt(stagingBuffer.array(), stagingBuffer.arrayOffset(), packetLen,
+                           sendBuffer.array(), sendBuffer.arrayOffset() + 4);
         } catch (Exception e) {
             // Should never happen
             throw panic(e);
@@ -222,7 +223,8 @@ public class ControllerStream {
 
         // Send the packet over the control stream on Gen 5+
         if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_5) {
-            controlSender.sendInputPacket(sendBuffer.array(), (short) (paddedLength + 4));
+            controlSender.sendInputPacket(
+                    sendBuffer.array(), sendBuffer.arrayOffset(), paddedLength + 4);
 
             // For reasons that I can't understand, NVIDIA decides to use the last 16
             // bytes of ciphertext in the most recent game controller packet as the IV for
