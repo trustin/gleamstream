@@ -7,15 +7,9 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedTransferQueue;
-
-import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.ShortBufferException;
-import javax.crypto.spec.IvParameterSpec;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +18,10 @@ import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.ThreadUtil;
 import com.limelight.nvstream.control.InputPacketSender;
+import com.limelight.nvstream.input.cipher.AesCbcInputCipher;
+import com.limelight.nvstream.input.cipher.AesGcmInputCipher;
+import com.limelight.nvstream.input.cipher.FastAesGcmInputCipher;
+import com.limelight.nvstream.input.cipher.InputCipher;
 
 public class ControllerStream {
 
@@ -57,15 +55,23 @@ public class ControllerStream {
 
         if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7) {
             // Newer GFE versions use AES GCM
-            cipher = new AesGcmCipher();
+            InputCipher cipher;
+            try {
+                cipher = new FastAesGcmInputCipher();
+                logger.info("Using fast-path AES/GCM cipher");
+            } catch (Throwable t) {
+                logger.warn("Using slow-path AES/GCM cipher", t);
+                cipher = new AesGcmInputCipher();
+            }
+            this.cipher = cipher;
         } else {
             // Older versions used AES CBC
-            cipher = new AesCbcCipher();
+            cipher = new AesCbcInputCipher();
         }
 
         ByteBuffer bb = ByteBuffer.allocate(16);
         bb.putInt(context.riKeyId);
-        cipher.initialize(context.riKey, bb.array());
+        cipher.initialize(context.riKey, bb.array(), 0, bb.capacity());
     }
 
     public void initialize(InputPacketSender controlSender) throws IOException {
@@ -223,8 +229,7 @@ public class ControllerStream {
             // future encryption. I think it may be a buffer overrun on their end but we'll have
             // to mimic it to work correctly.
             if (context.serverGeneration >= ConnectionContext.SERVER_GENERATION_7 && paddedLength >= 32) {
-                cipher.initialize(context.riKey, Arrays.copyOfRange(
-                        sendBuffer.array(), 4 + paddedLength - 16, 4 + paddedLength));
+                cipher.initialize(context.riKey, sendBuffer.array(), 4 + paddedLength - 16, 16);
             }
         } else {
             // Send the packet over the TCP connection on Gen 4 and below
@@ -273,96 +278,4 @@ public class ControllerStream {
         queuePacket(new MouseScrollPacket(scrollClicks));
     }
 
-    private interface InputCipher {
-        void initialize(SecretKey key, byte[] iv);
-
-        int getEncryptedSize(int plaintextSize);
-
-        void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset);
-    }
-
-    private static class AesCbcCipher implements InputCipher {
-        private Cipher cipher;
-
-        @Override
-        public void initialize(SecretKey key, byte[] iv) {
-            try {
-                cipher = Cipher.getInstance("AES/CBC/NoPadding");
-                cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
-            } catch (Exception e) {
-                throw panic(e);
-            }
-        }
-
-        @Override
-        public int getEncryptedSize(int plaintextSize) {
-            // CBC requires padding to the next multiple of 16
-            return (plaintextSize + 15) / 16 * 16;
-        }
-
-        private int inPlacePadData(byte[] data, int length) {
-            // This implements the PKCS7 padding algorithm
-
-            if (length % 16 == 0) {
-                // Already a multiple of 16
-                return length;
-            }
-
-            int paddedLength = getEncryptedSize(length);
-            byte paddingByte = (byte) (16 - length % 16);
-
-            for (int i = length; i < paddedLength; i++) {
-                data[i] = paddingByte;
-            }
-
-            return paddedLength;
-        }
-
-        @Override
-        public void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset) {
-            int encryptedLength = inPlacePadData(inputData, inputLength);
-            try {
-                cipher.update(inputData, 0, encryptedLength, outputData, outputOffset);
-            } catch (ShortBufferException e) {
-                throw panic(e);
-            }
-        }
-    }
-
-    private static class AesGcmCipher implements InputCipher {
-        private SecretKey key;
-        private byte[] iv;
-
-        @Override
-        public int getEncryptedSize(int plaintextSize) {
-            // GCM uses no padding + 16 bytes tag for message authentication
-            return plaintextSize + 16;
-        }
-
-        @Override
-        public void initialize(SecretKey key, byte[] iv) {
-            this.key = key;
-            this.iv = iv;
-        }
-
-        @Override
-        public void encrypt(byte[] inputData, int inputLength, byte[] outputData, int outputOffset) {
-            // Reconstructing the cipher on every invocation really sucks but we have to do it
-            // because of the way NVIDIA is using GCM where each message is tagged. Java doesn't
-            // have an easy way that I know of to get a tag out mid-stream.
-            Cipher cipher;
-            try {
-                cipher = Cipher.getInstance("AES/GCM/NoPadding");
-                cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
-
-                // This is also non-ideal. Java gives us <ciphertext><tag> but we want to send <tag><ciphertext>
-                // so we'll take the output and arraycopy it into the right spot in the output buffer
-                byte[] rawCipherOut = cipher.doFinal(inputData, 0, inputLength);
-                System.arraycopy(rawCipherOut, inputLength, outputData, outputOffset, 16);
-                System.arraycopy(rawCipherOut, 0, outputData, outputOffset + 16, inputLength);
-            } catch (Exception e) {
-                throw panic(e);
-            }
-        }
-    }
 }
