@@ -132,9 +132,11 @@ import kr.motd.gleamstream.gamepad.GamepadInput;
 import kr.motd.gleamstream.gamepad.GamepadMapping;
 import kr.motd.gleamstream.gamepad.GamepadMappings;
 import kr.motd.gleamstream.gamepad.GamepadOutput;
+import kr.motd.gleamstream.gamepad.GamepadState;
 
 final class MainWindow {
 
+    private static final int NV_MAX_NUM_GAMEPADS = 4;
     private static final int NV_STICK_MAX = 0x7FFE;
     private static final int NV_TRIGGER_MAX = 0xFF;
 
@@ -153,8 +155,8 @@ final class MainWindow {
     private final GamepadMappings availableGamepadMappings;
     private final Int2ObjectMap<GamepadMapping> attachedGamepads;
     private final Int2ShortMap gamepadAssignments;
-    private final IntSet knownMissingGamepadMappings = new IntOpenHashSet();
-    private short lastGamepadButtonFlags;
+    private final GamepadState[] lastGamepadStates;
+    private final IntSet knownMissingGamepadMappings;
 
     // Fields for mouse cursor position
     private double lastCursorXpos;
@@ -187,6 +189,11 @@ final class MainWindow {
         attachedGamepads = new Int2ObjectOpenHashMap<>();
         gamepadAssignments = new Int2ShortOpenHashMap();
         gamepadAssignments.defaultReturnValue((short) -1);
+        lastGamepadStates = new GamepadState[NV_MAX_NUM_GAMEPADS];
+        for (int i = 0; i < lastGamepadStates.length; i++) {
+            lastGamepadStates[i] = new GamepadState();
+        }
+        knownMissingGamepadMappings = new IntOpenHashSet();
         currentWindow = this;
     }
 
@@ -401,12 +408,12 @@ final class MainWindow {
 
             short nvJid = gamepadAssignments.get(jid);
             short buttonFlags = 0;
-            int leftStickX = 0;
-            int leftStickY = 0;
-            int rightStickX = 0;
-            int rightStickY = 0;
-            int leftTrigger = 0;
-            int rightTrigger = 0;
+            short leftStickX  = 0;
+            short leftStickY  = 0;
+            short rightStickX = 0;
+            short rightStickY = 0;
+            byte leftTrigger  = 0;
+            byte rightTrigger = 0;
 
             final int numButtons = buttons.remaining();
             for (int i = 0; i < numButtons; i++) {
@@ -452,10 +459,10 @@ final class MainWindow {
                             rightStickY = NV_STICK_MAX;
                             break;
                         case LT:
-                            leftTrigger = NV_TRIGGER_MAX;
+                            leftTrigger = (byte) NV_TRIGGER_MAX;
                             break;
                         case RT:
-                            rightTrigger = NV_TRIGGER_MAX;
+                            rightTrigger = (byte) NV_TRIGGER_MAX;
                             break;
                         default:
                             buttonFlags |= mapped.out().buttonFlag();
@@ -468,7 +475,7 @@ final class MainWindow {
                 // Assign the controller number on the first button press
                 // so that unused gamepads are not assigned.
                 if (buttonFlags != 0) {
-                    for (short i = 0; i < 4; i++) {
+                    for (short i = 0; i < NV_MAX_NUM_GAMEPADS; i++) {
                         if (!gamepadAssignments.containsValue(i)) {
                             nvJid = i;
                             gamepadAssignments.put(jid, i);
@@ -561,13 +568,20 @@ final class MainWindow {
                 rightStickY = 0;
             }
 
-            if (nvConn != null) {
-                nvConn.sendControllerInput(
-                        nvJid, buttonFlags, (byte) leftTrigger, (byte) rightTrigger,
-                        (short) leftStickX, (short) leftStickY, (short) rightStickX, (short) rightStickY);
-            }
+            final GamepadState lastGamepadState = lastGamepadStates[nvJid];
+            final short lastGamepadButtonFlags = lastGamepadState.buttonFlags();
 
-            if (nvJid == 0) {
+            // Process the input only when there's a change.
+            if (lastGamepadState.update(
+                    buttonFlags, leftTrigger, rightTrigger,
+                    leftStickX, leftStickY, rightStickX, rightStickY)) {
+
+                if (nvConn != null) {
+                    nvConn.sendControllerInput(
+                            nvJid, buttonFlags, leftTrigger, rightTrigger,
+                            leftStickX, leftStickY, rightStickX, rightStickY);
+                }
+
                 // Quit when OSD is visible and BACK+START is pressed on the first gamepad.
                 if (showOsd) {
                     if (buttonFlags == (BACK_FLAG | PLAY_FLAG) &&
@@ -589,8 +603,6 @@ final class MainWindow {
 
                     setOsdVisibility(window, !showOsd);
                 }
-
-                lastGamepadButtonFlags = buttonFlags;
             }
         }
     }
@@ -603,8 +615,8 @@ final class MainWindow {
         return (short) (Math.min(Math.max(getGamepadAxisValue(in, value), -1.0), 1.0) * NV_STICK_MAX);
     }
 
-    private static short getGamepadTriggerValue(GamepadInput in, float value) {
-        return (short) (Math.min(Math.max(getGamepadAxisValue(in, value), 0), 1.0) * NV_TRIGGER_MAX);
+    private static byte getGamepadTriggerValue(GamepadInput in, float value) {
+        return (byte) (Math.min(Math.max(getGamepadAxisValue(in, value), 0), 1.0) * NV_TRIGGER_MAX);
     }
 
     private static float getGamepadAxisValue(GamepadInput in, float value) {
