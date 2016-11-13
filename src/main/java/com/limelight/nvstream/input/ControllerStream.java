@@ -8,15 +8,18 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
-import com.limelight.nvstream.ThreadUtil;
+import com.limelight.nvstream.Util;
 import com.limelight.nvstream.control.InputPacketSender;
 import com.limelight.nvstream.input.cipher.AesCbcInputCipher;
 import com.limelight.nvstream.input.cipher.AesGcmInputCipher;
@@ -44,7 +47,9 @@ public class ControllerStream {
     private final InputCipher cipher;
 
     private Thread inputThread;
-    private final BlockingQueue<InputPacket> inputQueue = new LinkedTransferQueue<>();
+    private final BlockingQueue<InputPacket> inputQueue = new ArrayBlockingQueue<>(128);
+    private final AtomicInteger droppedPackets = new AtomicInteger();
+    private ScheduledFuture<?> droppedPacketWarningFuture;
 
     private final ByteBuffer stagingBuffer = ByteBuffer.allocate(128);
     private final ByteBuffer sendBuffer = ByteBuffer.allocate(128);
@@ -96,86 +101,88 @@ public class ControllerStream {
 
                 while (!Thread.currentThread().isInterrupted()) {
                     final InputPacket packet = inputQueue.take();
+                    final int remainingPackets = inputQueue.size();
 
-                    // Try to batch mouse move packets
-                    if (!inputQueue.isEmpty() && packet instanceof MouseMovePacket) {
-                        MouseMovePacket initialMouseMove = (MouseMovePacket) packet;
-                        int totalDeltaX = initialMouseMove.deltaX;
-                        int totalDeltaY = initialMouseMove.deltaY;
+                    if (remainingPackets != 0) {
+                        // Try to batch mouse move packets
+                        if (packet instanceof MouseMovePacket) {
+                            final MouseMovePacket initialPacket = (MouseMovePacket) packet;
+                            int totalDeltaX = initialPacket.deltaX;
+                            int totalDeltaY = initialPacket.deltaY;
 
-                        // Combine the deltas with other mouse move packets in the queue
-                        synchronized (inputQueue) {
-                            Iterator<InputPacket> i = inputQueue.iterator();
-                            while (i.hasNext()) {
-                                InputPacket queuedPacket = i.next();
+                            // Combine the deltas with other mouse move packets in the queue
+                            final Iterator<InputPacket> it = inputQueue.iterator();
+                            for (int i = 0; i < remainingPackets; i++) {
+                                final InputPacket queuedPacket = it.next();
                                 if (queuedPacket instanceof MouseMovePacket) {
-                                    MouseMovePacket queuedMouseMove = (MouseMovePacket) queuedPacket;
+                                    final MouseMovePacket queuedMouseMove = (MouseMovePacket) queuedPacket;
 
                                     // Add this packet's deltas to the running total
                                     totalDeltaX += queuedMouseMove.deltaX;
                                     totalDeltaY += queuedMouseMove.deltaY;
 
                                     // Remove this packet from the queue
-                                    i.remove();
+                                    it.remove();
                                 }
                             }
+
+                            // Total deltas could overflow the short so we must split them if required
+                            do {
+                                short partialDeltaX = (short) (totalDeltaX < 0 ?
+                                                               Math.max(Short.MIN_VALUE, totalDeltaX) :
+                                                               Math.min(Short.MAX_VALUE, totalDeltaX));
+                                short partialDeltaY = (short) (totalDeltaY < 0 ?
+                                                               Math.max(Short.MIN_VALUE, totalDeltaY) :
+                                                               Math.min(Short.MAX_VALUE, totalDeltaY));
+
+                                initialPacket.deltaX = partialDeltaX;
+                                initialPacket.deltaY = partialDeltaY;
+
+                                sendPacket(initialPacket);
+
+                                totalDeltaX -= partialDeltaX;
+                                totalDeltaY -= partialDeltaY;
+                            } while (totalDeltaX != 0 && totalDeltaY != 0);
+                            continue;
                         }
 
-                        // Total deltas could overflow the short so we must split them if required
-                        do {
-                            short partialDeltaX = (short) (totalDeltaX < 0 ?
-                                                           Math.max(Short.MIN_VALUE, totalDeltaX) :
-                                                           Math.min(Short.MAX_VALUE, totalDeltaX));
-                            short partialDeltaY = (short) (totalDeltaY < 0 ?
-                                                           Math.max(Short.MIN_VALUE, totalDeltaY) :
-                                                           Math.min(Short.MAX_VALUE, totalDeltaY));
+                        // Try to batch axis changes on controller packets too
+                        if (packet instanceof MultiControllerPacket) {
+                            final MultiControllerPacket initialPacket = (MultiControllerPacket) packet;
+                            ControllerBatchingBlock batchingBlock = null;
 
-                            initialMouseMove.deltaX = partialDeltaX;
-                            initialMouseMove.deltaY = partialDeltaY;
-
-                            sendPacket(initialMouseMove);
-
-                            totalDeltaX -= partialDeltaX;
-                            totalDeltaY -= partialDeltaY;
-                        } while (totalDeltaX != 0 && totalDeltaY != 0);
-                    }
-                    // Try to batch axis changes on controller packets too
-                    else if (!inputQueue.isEmpty() && packet instanceof MultiControllerPacket) {
-                        MultiControllerPacket initialControllerPacket = (MultiControllerPacket) packet;
-                        ControllerBatchingBlock batchingBlock = null;
-
-                        synchronized (inputQueue) {
-                            Iterator<InputPacket> i = inputQueue.iterator();
-                            while (i.hasNext()) {
-                                InputPacket queuedPacket = i.next();
+                            final Iterator<InputPacket> it = inputQueue.iterator();
+                            for (int i = 0; i < remainingPackets; i++) {
+                                final InputPacket queuedPacket = it.next();
 
                                 if (queuedPacket instanceof MultiControllerPacket) {
                                     // Only initialize the batching block if we got here
                                     if (batchingBlock == null) {
-                                        batchingBlock = new ControllerBatchingBlock(initialControllerPacket);
+                                        batchingBlock = new ControllerBatchingBlock(initialPacket);
                                     }
 
                                     if (batchingBlock.submitNewPacket((MultiControllerPacket) queuedPacket)) {
                                         // Batching was successful, so remove this packet
-                                        i.remove();
+                                        it.remove();
                                     } else {
                                         // Unable to batch so we must stop
                                         break;
                                     }
                                 }
                             }
-                        }
 
-                        if (batchingBlock != null) {
-                            // Reinitialize the initial packet with the new values
-                            batchingBlock.reinitializePacket(initialControllerPacket);
-                        }
+                            if (batchingBlock != null) {
+                                // Reinitialize the initial packet with the new values
+                                batchingBlock.reinitializePacket(initialPacket);
+                            }
 
-                        sendPacket(packet);
-                    } else {
-                        // Send any other packet as-is
-                        sendPacket(packet);
+                            sendPacket(initialPacket);
+                            continue;
+                        }
                     }
+
+                    // Send any other packet as-is
+                    sendPacket(packet);
                 }
             } catch (InterruptedException e) {
                 // Interrupted
@@ -188,9 +195,21 @@ public class ControllerStream {
         inputThread.setName("Input - Queue");
         inputThread.setPriority(Thread.NORM_PRIORITY + 1);
         inputThread.start();
+
+        droppedPacketWarningFuture = Util.scheduleAtFixedDelay(() -> {
+            final int droppedPackets = this.droppedPackets.getAndSet(0);
+            if (droppedPackets != 0) {
+                logger.warn("Dropped {} input packets", this.droppedPackets);
+            }
+        }, 1, 1, TimeUnit.SECONDS);
     }
 
     public void abort() {
+        if (droppedPacketWarningFuture != null) {
+            droppedPacketWarningFuture.cancel(false);
+            droppedPacketWarningFuture = null;
+        }
+
         if (s != null) {
             try {
                 s.close();
@@ -199,7 +218,7 @@ public class ControllerStream {
             }
         }
 
-        ThreadUtil.stop(inputThread);
+        Util.stop(inputThread);
     }
 
     private void sendPacket(InputPacket packet) throws IOException {
@@ -241,8 +260,9 @@ public class ControllerStream {
     }
 
     private void queuePacket(InputPacket packet) {
-        synchronized (inputQueue) {
-            inputQueue.add(packet);
+        // NB: Use offer() rather than add() so we do not block.
+        if (!inputQueue.offer(packet)) {
+            droppedPackets.incrementAndGet();
         }
     }
 

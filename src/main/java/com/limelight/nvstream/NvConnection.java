@@ -7,7 +7,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 
 import javax.crypto.KeyGenerator;
@@ -93,7 +92,7 @@ public class NvConnection {
     }
 
     public Future<?> stop() {
-        return ForkJoinPool.commonPool().submit(() -> {
+        return Util.submit(() -> {
             synchronized (this) {
                 try {
                     if (inputStream != null) {
@@ -291,7 +290,7 @@ public class NvConnection {
     }
 
     private boolean startControlStream() throws IOException {
-        controlStream = new ControlStream(this, context);
+        controlStream = new ControlStream(context);
         controlStream.initialize();
         controlStream.start();
         return true;

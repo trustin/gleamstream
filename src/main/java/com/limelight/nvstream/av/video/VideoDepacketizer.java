@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
-import com.limelight.nvstream.TimeHelper;
+import com.limelight.nvstream.Util;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.DecodedUnitPool;
@@ -341,7 +341,7 @@ public class VideoDepacketizer {
     private void addInputDataFast(VideoPacket packet, ByteBufferDescriptor location, boolean firstPacket) {
         if (firstPacket) {
             // Setup state for the new frame
-            frameStartTime = TimeHelper.getMonotonicMillis();
+            frameStartTime = Util.monotonicMillis();
         }
 
         // Add the payload data to the chain
@@ -466,7 +466,7 @@ public class VideoDepacketizer {
 
         if (firstPacket && isIdrFrameStart(cachedReassemblyDesc)) {
             // The slow path doesn't update the frame start time by itself
-            frameStartTime = TimeHelper.getMonotonicMillis();
+            frameStartTime = Util.monotonicMillis();
 
             // SPS and PPS prefix is padded between NALs, so we must decode it with the slow path
             addInputDataSlow(packet, cachedReassemblyDesc);

@@ -7,7 +7,7 @@ import java.util.Iterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.limelight.nvstream.TimeHelper;
+import com.limelight.nvstream.Util;
 
 public final class RtpReorderQueue<T extends RtpPacket> {
 
@@ -63,7 +63,7 @@ public final class RtpReorderQueue<T extends RtpPacket> {
             }
         }
 
-        RtpQueueEntry<T> entry = new RtpQueueEntry<>(packet, seq, TimeHelper.getMonotonicMillis());
+        RtpQueueEntry<T> entry = new RtpQueueEntry<>(packet, seq, Util.monotonicMillis());
         if (oldestQueuedTime == Long.MAX_VALUE) {
             oldestQueuedTime = entry.queueTime;
         }
@@ -119,9 +119,9 @@ public final class RtpReorderQueue<T extends RtpPacket> {
         boolean dequeuePacket = false;
 
         // Check that the queue's time constraint is satisfied
-        if (TimeHelper.getMonotonicMillis() - oldestQueuedTime > maxQueueTime) {
+        if (Util.monotonicMillis() - oldestQueuedTime > maxQueueTime) {
             logger.info("Returning RTP packet queued for too long: " +
-                        (TimeHelper.getMonotonicMillis() - oldestQueuedTime));
+                        (Util.monotonicMillis() - oldestQueuedTime));
             dequeuePacket = true;
         }
 

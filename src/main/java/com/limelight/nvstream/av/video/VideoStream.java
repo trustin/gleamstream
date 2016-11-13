@@ -7,17 +7,17 @@ import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.DatagramChannel;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.ScheduledFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
-import com.limelight.nvstream.ThreadUtil;
+import com.limelight.nvstream.Util;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.RtpPacket;
+import com.limelight.nvstream.av.RtpPingSender;
 import com.limelight.nvstream.av.RtpReorderQueue;
 import com.limelight.nvstream.av.RtpReorderQueue.RtpQueueStatus;
 
@@ -44,7 +44,8 @@ public class VideoStream {
     private DatagramChannel rtp;
     private Socket firstFrameSocket;
 
-    private final List<Thread> threads = new ArrayList<>();
+    private Thread receiveThread;
+    private ScheduledFuture<?> pingFuture;
 
     private final NvConnection parent;
     private final ConnectionContext context;
@@ -69,6 +70,12 @@ public class VideoStream {
 
         aborting = true;
 
+        // Stop sending pings.
+        if (pingFuture != null) {
+            pingFuture.cancel(false);
+            pingFuture = null;
+        }
+
         // Close the socket to interrupt the receive thread
         if (rtp != null) {
             try {
@@ -78,8 +85,9 @@ public class VideoStream {
             }
         }
 
-        // Wait for threads to terminate
-        ThreadUtil.stop(threads);
+        // Wait for the receive thread to terminate
+        Util.stop(receiveThread);
+        receiveThread = null;
 
         if (firstFrameSocket != null) {
             try {
@@ -95,8 +103,6 @@ public class VideoStream {
             }
             decRend.release();
         }
-
-        threads.clear();
     }
 
     private void connectFirstFrame() throws IOException {
@@ -166,7 +172,7 @@ public class VideoStream {
         if (decRend != null) {
             // Start the receive thread early to avoid missing
             // early packets that are part of the IDR frame
-            startReceiveThread();
+            receiveThread = startReceiveThread();
         }
 
         // Open the first frame port connection on Gen 3 servers
@@ -176,7 +182,7 @@ public class VideoStream {
 
         // Start pinging before reading the first frame
         // so GFE knows where to send UDP data
-        startUdpPingThread();
+        pingFuture = RtpPingSender.start(rtp);
 
         // Read the first frame on Gen 3 servers
         if (context.serverGeneration == ConnectionContext.SERVER_GENERATION_3) {
@@ -186,7 +192,7 @@ public class VideoStream {
         return true;
     }
 
-    private void startReceiveThread() {
+    private Thread startReceiveThread() {
         // Receive thread
         Thread t = new Thread(() -> {
             VideoPacket[] ring = new VideoPacket[VIDEO_RING_SIZE];
@@ -262,36 +268,9 @@ public class VideoStream {
                 parent.stop();
             }
         });
-        threads.add(t);
         t.setName("Video - Receive");
         t.setPriority(Thread.MAX_PRIORITY - 1);
         t.start();
-    }
-
-    private void startUdpPingThread() {
-        // Ping thread
-        Thread t = new Thread(() -> {
-            // PING in ASCII
-            final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
-
-            try {
-                // Send PING every 500 ms
-                while (!Thread.currentThread().isInterrupted()) {
-                    pingPacketData.clear();
-                    rtp.write(pingPacketData);
-                    Thread.sleep(500);
-                }
-            } catch (InterruptedException e) {
-                // Interrupted
-            } catch (IOException e) {
-                logger.warn("Failed to send a video ping", e);
-            } finally {
-                parent.stop();
-            }
-        });
-        threads.add(t);
-        t.setName("Video - Ping");
-        t.setPriority(Thread.MIN_PRIORITY);
-        t.start();
+        return t;
     }
 }

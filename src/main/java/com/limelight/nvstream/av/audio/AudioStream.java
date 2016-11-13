@@ -6,16 +6,16 @@ import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.DatagramChannel;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.ScheduledFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.limelight.nvstream.ConnectionContext;
 import com.limelight.nvstream.NvConnection;
-import com.limelight.nvstream.ThreadUtil;
+import com.limelight.nvstream.Util;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
+import com.limelight.nvstream.av.RtpPingSender;
 import com.limelight.nvstream.av.RtpReorderQueue;
 import com.limelight.nvstream.av.RtpReorderQueue.RtpQueueStatus;
 
@@ -39,7 +39,9 @@ public final class AudioStream {
 
     private AudioDepacketizer depacketizer;
 
-    private final List<Thread> threads = new ArrayList<>();
+    private Thread decodeThread;
+    private Thread receiveThread;
+    private ScheduledFuture<?> pingFuture;
 
     private volatile boolean aborting;
 
@@ -60,6 +62,12 @@ public final class AudioStream {
 
         aborting = true;
 
+        // Stop sending pings.
+        if (pingFuture != null) {
+            pingFuture.cancel(false);
+            pingFuture = null;
+        }
+
         // Close the socket to interrupt the receive thread
         if (rtp != null) {
             try {
@@ -70,11 +78,11 @@ public final class AudioStream {
         }
 
         // Wait for threads to terminate
-        ThreadUtil.stop(threads);
+        Util.stop(receiveThread, decodeThread);
+        receiveThread = null;
+        decodeThread = null;
 
         streamListener.streamClosing();
-
-        threads.clear();
     }
 
     public boolean startAudioStream() throws IOException {
@@ -85,13 +93,12 @@ public final class AudioStream {
             return false;
         }
 
-        startReceiveThread();
-
         if ((streamListener.getCapabilities() & AudioRenderer.CAPABILITY_DIRECT_SUBMIT) == 0) {
-            startDecoderThread();
+            decodeThread = startDecoderThread();
         }
 
-        startUdpPingThread();
+        receiveThread = startReceiveThread();
+        pingFuture = RtpPingSender.start(rtp);
 
         return true;
     }
@@ -154,7 +161,7 @@ public final class AudioStream {
         return true;
     }
 
-    private void startDecoderThread() {
+    private Thread startDecoderThread() {
         // Decoder thread
         Thread t = new Thread(() -> {
             try {
@@ -169,13 +176,14 @@ public final class AudioStream {
                 parent.stop();
             }
         });
-        threads.add(t);
+
         t.setName("Audio - Player");
         t.setPriority(Thread.NORM_PRIORITY + 2);
         t.start();
+        return t;
     }
 
-    private void startReceiveThread() {
+    private Thread startReceiveThread() {
         // Receive thread
         Thread t = new Thread(() -> {
             byte[] buffer = new byte[MAX_PACKET_SIZE];
@@ -227,36 +235,9 @@ public final class AudioStream {
                 parent.stop();
             }
         });
-        threads.add(t);
         t.setName("Audio - Receive");
         t.setPriority(Thread.NORM_PRIORITY + 1);
         t.start();
-    }
-
-    private void startUdpPingThread() {
-        // Ping thread
-        Thread t = new Thread(() -> {
-            // PING in ASCII
-            final ByteBuffer pingPacketData = ByteBuffer.wrap(new byte[] { 0x50, 0x49, 0x4E, 0x47 });
-
-            // Send PING every 500 ms
-            try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    pingPacketData.clear();
-                    rtp.write(pingPacketData);
-                    Thread.sleep(500);
-                }
-            } catch (IOException e) {
-                logger.warn("Failed to send an audio ping", e);
-            } catch (InterruptedException e) {
-                // Interrupted
-            } finally {
-                parent.stop();
-            }
-        });
-        threads.add(t);
-        t.setPriority(Thread.MIN_PRIORITY);
-        t.setName("Audio - Ping");
-        t.start();
+        return t;
     }
 }

@@ -7,17 +7,17 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedTransferQueue;
+import java.util.Queue;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
+import org.jctools.queues.SpscLinkedQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.io.ByteStreams;
 import com.limelight.nvstream.ConnectionContext;
-import com.limelight.nvstream.NvConnection;
-import com.limelight.nvstream.ThreadUtil;
-import com.limelight.nvstream.TimeHelper;
+import com.limelight.nvstream.Util;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.enet.EnetConnection;
@@ -137,13 +137,12 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             null, // Input Data
     };
 
-    public static final int LOSS_REPORT_INTERVAL_MS = 50;
+    private static final int LOSS_REPORT_INTERVAL_MS = 50;
 
     private int lastGoodFrame;
     private int lastSeenFrame;
     private int lossCountSinceLastReport;
 
-    private final NvConnection parent;
     private final ConnectionContext context;
 
     // If we drop at least 10 frames in 15 second (or less) window
@@ -172,9 +171,9 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private final byte[] packetSendBuf = new byte[256];
     private final byte[] packetRecvBuf = new byte[4];
 
-    private Thread lossStatsThread;
-    private Thread resyncThread;
-    private final BlockingQueue<int[]> invalidReferenceFrameTuples = new LinkedTransferQueue<>();
+    private ScheduledFuture<?> lossStatsFuture;
+    private final Runnable resyncTask;
+    private final Queue<int[]> invalidReferenceFrameTuples = new SpscLinkedQueue<>();
     private volatile boolean aborting;
     private boolean forceIdrRequest;
 
@@ -182,8 +181,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private final short[] payloadLengths;
     private final byte[][] preconstructedPayloads;
 
-    public ControlStream(NvConnection parent, ConnectionContext context) {
-        this.parent = parent;
+    public ControlStream(ConnectionContext context) {
         this.context = context;
 
         switch (context.serverGeneration) {
@@ -214,6 +212,52 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             forceIdrRequest = (context.videoDecoderRenderer.getCapabilities() &
                                VideoDecoderRenderer.CAPABILITY_REFERENCE_FRAME_INVALIDATION) == 0;
         }
+
+        resyncTask = () -> {
+            try {
+                boolean idrFrameRequired = false;
+                int[] tuple = invalidReferenceFrameTuples.poll();
+                if (tuple == null) {
+                    // Aggregated by previous resync task
+                    return;
+                }
+
+                // Check for the magic IDR frame tuple
+                int[] lastTuple = null;
+                if (tuple[0] != 0 || tuple[1] != 0) {
+                    // Aggregate all lost frames into one range
+                    for (;;) {
+                        int[] nextTuple = lastTuple = invalidReferenceFrameTuples.poll();
+                        if (nextTuple == null) {
+                            break;
+                        }
+
+                        // Check if this tuple has IDR frame magic values
+                        if (nextTuple[0] == 0 && nextTuple[1] == 0) {
+                            // We will need an IDR frame now, but we won't break out
+                            // of the loop because we want to dequeue all pending requests
+                            idrFrameRequired = true;
+                        }
+                    }
+                } else {
+                    // We must require an IDR frame
+                    idrFrameRequired = true;
+                }
+
+                if (forceIdrRequest || idrFrameRequired) {
+                    requestIdrFrame();
+                } else {
+                    // Update the end of the range to the latest tuple
+                    if (lastTuple != null) {
+                        tuple[1] = lastTuple[1];
+                    }
+
+                    invalidateReferenceFrames(tuple[0], tuple[1]);
+                }
+            } catch (IOException e) {
+                logger.warn("Failed to request an IDR frame", e);
+            }
+        };
     }
 
     public void initialize() throws IOException {
@@ -288,6 +332,11 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
 
         aborting = true;
 
+        if (lossStatsFuture != null) {
+            lossStatsFuture.cancel(false);
+            lossStatsFuture = null;
+        }
+
         if (s != null) {
             try {
                 s.close();
@@ -295,8 +344,6 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
                 logger.warn("Failed to close the control stream", e);
             }
         }
-
-        ThreadUtil.stop(lossStatsThread, resyncThread);
 
         if (enetConnection != null) {
             enetConnection.close();
@@ -317,79 +364,14 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
             s.setSoTimeout(0);
         }
 
-        lossStatsThread = new Thread(() -> {
-            ByteBuffer bb = ByteBuffer.allocate(payloadLengths[IDX_LOSS_STATS]).order(ByteOrder.LITTLE_ENDIAN);
-
+        final ByteBuffer lossStatsBuf = ByteBuffer.allocate(payloadLengths[IDX_LOSS_STATS])
+                                                  .order(ByteOrder.LITTLE_ENDIAN);
+        lossStatsFuture = Util.scheduleAtFixedDelay(() -> {
             try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    sendLossStats(bb);
-                    lossCountSinceLastReport = 0;
-                    Thread.sleep(LOSS_REPORT_INTERVAL_MS);
-                }
-            } catch (IOException e) {
-                logger.warn("Failed to send loss stats", e);
-            } catch (InterruptedException e) {
-                // Interrupted
-            } finally {
-                parent.stop();
-            }
-        });
-        lossStatsThread.setPriority(Thread.MIN_PRIORITY + 1);
-        lossStatsThread.setName("Control - Loss Stats Thread");
-        lossStatsThread.start();
-
-        resyncThread = new Thread(() -> {
-            try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    boolean idrFrameRequired = false;
-
-                    // Wait for a tuple
-                    int[] tuple = invalidReferenceFrameTuples.take();
-
-                    // Check for the magic IDR frame tuple
-                    int[] lastTuple = null;
-                    if (tuple[0] != 0 || tuple[1] != 0) {
-                        // Aggregate all lost frames into one range
-                        for (;;) {
-                            int[] nextTuple = lastTuple = invalidReferenceFrameTuples.poll();
-                            if (nextTuple == null) {
-                                break;
-                            }
-
-                            // Check if this tuple has IDR frame magic values
-                            if (nextTuple[0] == 0 && nextTuple[1] == 0) {
-                                // We will need an IDR frame now, but we won't break out
-                                // of the loop because we want to dequeue all pending requests
-                                idrFrameRequired = true;
-                            }
-                        }
-                    } else {
-                        // We must require an IDR frame
-                        idrFrameRequired = true;
-                    }
-
-                    if (forceIdrRequest || idrFrameRequired) {
-                        requestIdrFrame();
-                    } else {
-                        // Update the end of the range to the latest tuple
-                        if (lastTuple != null) {
-                            tuple[1] = lastTuple[1];
-                        }
-
-                        invalidateReferenceFrames(tuple[0], tuple[1]);
-                    }
-                }
-            } catch (InterruptedException e) {
-                // Interrupted
-            } catch (IOException e) {
-                logger.warn("Failed to request an IDR frame", e);
-            } finally {
-                parent.stop();
-            }
-        });
-        resyncThread.setName("Control - Resync Thread");
-        resyncThread.setPriority(Thread.MAX_PRIORITY - 1);
-        resyncThread.start();
+                sendLossStats(lossStatsBuf);
+                lossCountSinceLastReport = 0;
+            } catch (IOException ignored) {}
+        }, LOSS_REPORT_INTERVAL_MS, LOSS_REPORT_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
     private void doStartA() throws IOException {
@@ -474,6 +456,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
 
     private void resyncConnection(int firstLostFrame, int nextSuccessfulFrame) {
         invalidReferenceFrameTuples.add(new int[] { firstLostFrame, nextSuccessfulFrame });
+        Util.execute(resyncTask);
     }
 
     @Override
@@ -487,17 +470,17 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         }
 
         // Reset the loss count if it's been too long
-        if (TimeHelper.getMonotonicMillis() > LOSS_PERIOD_MS + lossTimestamp) {
+        if (Util.monotonicMillis() > LOSS_PERIOD_MS + lossTimestamp) {
             lossCount = 0;
-            lossTimestamp = TimeHelper.getMonotonicMillis();
+            lossTimestamp = Util.monotonicMillis();
         }
 
         // Count this loss event
         if (++lossCount == MAX_LOSS_COUNT_IN_PERIOD) {
             // Reset the loss event count if it's been too long
-            if (TimeHelper.getMonotonicMillis() > LOSS_EVENT_TIME_THRESHOLD_MS + lossEventTimestamp) {
+            if (Util.monotonicMillis() > LOSS_EVENT_TIME_THRESHOLD_MS + lossEventTimestamp) {
                 lossEventCount = 0;
-                lossEventTimestamp = TimeHelper.getMonotonicMillis();
+                lossEventTimestamp = Util.monotonicMillis();
             }
 
             if (++lossEventCount == LOSS_EVENTS_TO_WARN) {
