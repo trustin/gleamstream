@@ -213,7 +213,7 @@ public class NvConnection {
                 throw panic(
                         "The app " + context.streamConfig.getApp().getAppName() + " is not in GFE app list");
             }
-            logger.info("Please use '-appid {}' option instead of '-appname' for faster startup.", app.getAppId());
+            logger.info("App ID: {}", app.getAppId());
         }
 
         // If there's a game running, resume it

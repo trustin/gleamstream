@@ -19,6 +19,16 @@ public final class Util {
         return System.nanoTime() / 1000000L;
     }
 
+    public static int countNonNull(String... args) {
+        int cnt = 0;
+        for (String a : args) {
+            if (a != null) {
+                cnt++;
+            }
+        }
+        return cnt;
+    }
+
     public static void execute(Runnable task) {
         executor.execute(task);
     }

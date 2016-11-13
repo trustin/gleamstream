@@ -14,12 +14,19 @@ import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Scanner;
 import java.util.Stack;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
@@ -461,13 +468,30 @@ public class NvHTTP {
      * or even nothing at all! Look apps up by ID if at all possible
      * using the above function */
     public NvApp getAppByName(String appName) throws IOException, XmlPullParserException {
-        List<NvApp> appList = getAppList();
-        for (NvApp appFromList : appList) {
-            if (appFromList.getAppName().equalsIgnoreCase(appName)) {
-                return appFromList;
+        appName = simplifyAppName(appName);
+        Map<String, NvApp> apps = getAppList().stream().collect(Collectors.toMap(
+                app -> simplifyAppName(app.getAppName()), Function.identity(),
+                (a, b) -> a, LinkedHashMap::new));
+
+        // Try the exact match first.
+        for (Entry<String, NvApp> a : apps.entrySet()) {
+            if (a.getKey().equals(appName)) {
+                return a.getValue();
             }
         }
+
+        // Try the prefix match.
+        for (Entry<String, NvApp> a : apps.entrySet()) {
+            if (a.getKey().startsWith(appName)) {
+                return a.getValue();
+            }
+        }
+
         return null;
+    }
+
+    private static String simplifyAppName(String appName) {
+        return appName.replaceAll("\\W+", "").toLowerCase(Locale.ENGLISH);
     }
 
     public PairingManager.PairState pair(String serverInfo, String pin) throws Exception {
@@ -531,6 +555,8 @@ public class NvHTTP {
             }
         }
 
+        // Sort by application ID.
+        appList.sort(Comparator.comparingInt(NvApp::getAppId));
         return appList;
     }
 

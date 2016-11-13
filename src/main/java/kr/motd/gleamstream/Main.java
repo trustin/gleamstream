@@ -13,10 +13,10 @@ import org.slf4j.LoggerFactory;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
-import com.beust.jcommander.internal.Console;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
+import com.limelight.nvstream.Util;
 import com.limelight.nvstream.av.audio.AudioStream;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.enet.EnetConnection;
@@ -31,21 +31,6 @@ public final class Main {
 
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
-    static {
-        Thread.setDefaultUncaughtExceptionHandler((thread, cause) -> {
-            throw panic(cause);
-        });
-
-        // Load all native libraries.
-        logger.info("Loading native libraries");
-        Library.initialize();
-        FFmpegVideoDecoderRenderer.initNativeLibraries();
-        AudioStream.initNativeLibraries();
-        EnetConnection.initNativeLibraries();
-    }
-
-    private final Console console = JCommander.getConsole();
-
     @Parameter(
             names = "-connect",
             description = "Connects to the specified IP address or hostname (e.g. -c 192.168.0.100)")
@@ -55,6 +40,11 @@ public final class Main {
             names = "-pair",
             description = "Pairs with the specified IP address or hostname (e.g. -p 192.168.0.100)")
     private String pairHost;
+
+    @Parameter(
+            names = "-list",
+            description = "Lists the applications available in the specified IP address or hostname")
+    private String listHost;
 
     @Parameter(
             names = "-quit",
@@ -98,42 +88,60 @@ public final class Main {
         try {
             commander.parse(args);
         } catch (ParameterException ignored) {
-            console.println("Invalid arguments: " + String.join(", ", args));
+            System.err.println("Invalid arguments: " + String.join(", ", args));
             help = true;
         }
 
         if (args.length == 0) {
             help = true;
-        } else if (connectHost == null && pairHost == null && quitHost == null) {
-            console.println("-connect, -pair or -quit must be specified.");
+        } else if (Util.countNonNull(connectHost, pairHost, listHost, quitHost) == 0) {
+            System.err.println("-connect, -pair or -quit must be specified.");
             help = true;
-        } else if (connectHost != null && pairHost != null ||
-                   connectHost != null && quitHost != null ||
-                   pairHost != null && quitHost != null) {
-            console.println("-connect, -pair and -quit cannot be specified with each other.");
+        } else if (Util.countNonNull(connectHost, pairHost, listHost, quitHost) != 1) {
+            System.err.println("-connect, -pair, -list and -quit cannot be specified with each other.");
             help = true;
         } else if (resolution != 1080 && resolution != 720) {
-            console.println("The value of -res option must be 1080 or 720.");
+            System.err.println("The value of -res option must be 1080 or 720.");
             help = true;
         } else if (fps != 60 && fps != 30) {
-            console.println("The value of -fps option must be 60 or 30.");
+            System.err.println("The value of -fps option must be 60 or 30.");
             help = true;
         }
 
         if (Boolean.TRUE.equals(help)) {
-            commander.usage();
+            final StringBuilder buf = new StringBuilder();
+            commander.usage(buf);
+            System.err.print(buf);
+            System.err.flush();
             exit(1);
             return;
         }
+
+        initialize();
 
         final Preferences prefs = new Preferences();
         if (connectHost != null) {
             connect(prefs, resolution != 720, Boolean.TRUE.equals(useLocalAudio));
         } else if (pairHost != null) {
             pair(prefs);
+        } else if (listHost != null) {
+            list(prefs);
         } else {
             quit(prefs);
         }
+    }
+
+    private static void initialize() {
+        Thread.setDefaultUncaughtExceptionHandler((thread, cause) -> {
+            throw panic(cause);
+        });
+
+        // Load all native libraries.
+        logger.info("Loading native libraries");
+        Library.initialize();
+        FFmpegVideoDecoderRenderer.initNativeLibraries();
+        AudioStream.initNativeLibraries();
+        EnetConnection.initNativeLibraries();
     }
 
     private void connect(Preferences prefs, boolean use1080p, boolean useLocalAudio) throws Exception {
@@ -182,45 +190,51 @@ public final class Main {
         final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(pairHost), prefs.uniqueId(), crypto);
         final String serverInfo = nvHttp.getServerInfo();
         if (nvHttp.getPairState(serverInfo) == PairState.PAIRED) {
-            console.println("Paired already with " + pairHost);
+            logger.info("Paired already with {}", pairHost);
             return;
         }
 
         if (nvHttp.getCurrentGame(serverInfo) != 0) {
-            console.println("Server is currently in a game. Close it before pairing.");
+            logger.warn("Server is currently in a game. Close it before pairing.");
             return;
         }
 
         final String pin = PairingManager.generatePinString();
 
-        console.println("Pairing with " + pairHost + "; enter the PIN '" + pin + "' on the server ..");
+        logger.info("Pairing with {}; enter the PIN '{}' on the server ..", pairHost, pin);
         final PairState state = nvHttp.pair(serverInfo, pin);
 
         switch (state) {
             case NOT_PAIRED:
-                console.println("Not paired with " + pairHost);
+                logger.warn("Not paired with {}", pairHost);
                 break;
             case PAIRED:
-                console.println("Paired successfully with " + pairHost);
+                logger.info("Paired successfully with {}", pairHost);
                 break;
             case PIN_WRONG:
-                console.println("Wrong PIN");
+                logger.warn("Wrong PIN");
                 break;
             case FAILED:
-                console.println("Failed to pair with " + pairHost);
+                logger.warn("Failed to pair with {}", pairHost);
                 break;
             case ALREADY_IN_PROGRESS:
-                console.println("Other device is pairing with " + pairHost + " already.");
+                logger.warn("Other device is pairing with {} already.", pairHost);
                 break;
         }
+    }
+
+    private void list(Preferences prefs) throws Exception {
+        final CryptoProvider crypto = new DefaultCryptoProvider();
+        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(quitHost), prefs.uniqueId(), crypto);
+        nvHttp.getAppList().forEach(app -> System.out.println(app.getAppId() + "=" + app.getAppName()));
     }
 
     private void quit(Preferences prefs) throws Exception {
         final CryptoProvider crypto = new DefaultCryptoProvider();
         final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(quitHost), prefs.uniqueId(), crypto);
-        console.println("Quitting the current session at " + quitHost + " ..");
+        logger.info("Quitting the current session at {} ..", quitHost);
         nvHttp.quitApp();
-        console.println("Done");
+        logger.info("Done");
     }
 
     /*
