@@ -29,8 +29,10 @@ public final class Panic {
         if (guiEnabled) {
             TinyFileDialogs.tinyfd_messageBox("Error", toString(message, cause),
                                               "ok", "error", true);
-        } else {
+        } else if (cause != null) {
             logger.error(message, cause);
+        } else {
+            logger.error(message);
         }
 
         System.exit(1);
@@ -53,10 +55,18 @@ public final class Panic {
         return panic(message, new IllegalStateException("panic!"));
     }
 
+    public static RuntimeException panicWithoutTrace(String message) {
+        return panic(message, null);
+    }
+
     private static String toString(String message, Throwable cause) {
-        final String messageWithTrace =
-                TAB_PATTERN.matcher(message + '\n' + Throwables.getStackTraceAsString(cause))
-                           .replaceAll("    ");
+        final String messageWithTrace;
+        if (cause != null) {
+            messageWithTrace = TAB_PATTERN.matcher(message + '\n' + Throwables.getStackTraceAsString(cause))
+                                          .replaceAll("    ");
+        } else {
+            messageWithTrace = message;
+        }
 
         final String[] lines = NEWLINE_PATTERN.split(messageWithTrace);
         final StringBuilder buf = new StringBuilder();

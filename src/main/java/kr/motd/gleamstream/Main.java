@@ -95,7 +95,7 @@ public final class Main {
         if (args.length == 0) {
             help = true;
         } else if (Util.countNonNull(connectHost, pairHost, listHost, quitHost) == 0) {
-            System.err.println("-connect, -pair or -quit must be specified.");
+            System.err.println("-connect, -pair, -list or -quit must be specified.");
             help = true;
         } else if (Util.countNonNull(connectHost, pairHost, listHost, quitHost) != 1) {
             System.err.println("-connect, -pair, -list and -quit cannot be specified with each other.");
@@ -147,7 +147,7 @@ public final class Main {
     private void connect(Preferences prefs, boolean use1080p, boolean useLocalAudio) throws Exception {
         final MainWindow window = new MainWindow(prefs.gamepadMappings());
 
-        final Thread thread = new Thread(() -> {
+        Util.execute(() -> {
             final int width;
             final int height;
             if (use1080p) {
@@ -176,8 +176,6 @@ public final class Main {
 
             window.setNvConnection(conn);
         });
-        thread.setName("NvConnection Starter");
-        thread.start();
 
         // NB: GLFW event loop must be run on the main thread.
         window.osd().setProgress("Initializing");
@@ -225,7 +223,7 @@ public final class Main {
 
     private void list(Preferences prefs) throws Exception {
         final CryptoProvider crypto = new DefaultCryptoProvider();
-        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(quitHost), prefs.uniqueId(), crypto);
+        final NvHTTP nvHttp = new NvHTTP(InetAddress.getByName(listHost), prefs.uniqueId(), crypto);
         nvHttp.getAppList().forEach(app -> System.out.println(app.getAppId() + "=" + app.getAppName()));
     }
 
@@ -267,9 +265,9 @@ public final class Main {
     private static void addShutdownHook(NvConnection conn) {
         final Thread connStopper = new Thread(() -> {
             try {
-                conn.stop().get();
-            } catch (Exception e) {
-                logger.warn("Failed to stop an NvConnection", e);
+                conn.stop(true);
+            } catch (Throwable t) {
+                logger.warn("Failed to stop an NvConnection", t);
             }
         });
         connStopper.setName("NvConnection stopper");

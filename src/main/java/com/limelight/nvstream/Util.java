@@ -10,7 +10,7 @@ public final class Util {
 
     private static final ScheduledExecutorService executor =
             Executors.newSingleThreadScheduledExecutor(r -> {
-                final Thread thread = new Thread(r, "Task Scheduler");
+                final Thread thread = new Thread(r, "tasks");
                 thread.setDaemon(true);
                 return thread;
             });
