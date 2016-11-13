@@ -290,7 +290,7 @@ public class NvConnection {
     }
 
     private boolean startControlStream() throws IOException {
-        controlStream = new ControlStream(context);
+        controlStream = new ControlStream(this, context);
         controlStream.initialize();
         controlStream.start();
         return true;

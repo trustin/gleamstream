@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.io.ByteStreams;
 import com.limelight.nvstream.ConnectionContext;
+import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.Util;
 import com.limelight.nvstream.av.ConnectionStatusListener;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
@@ -143,6 +144,7 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private int lastSeenFrame;
     private int lossCountSinceLastReport;
 
+    private final NvConnection parent;
     private final ConnectionContext context;
 
     // If we drop at least 10 frames in 15 second (or less) window
@@ -181,7 +183,8 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
     private final short[] payloadLengths;
     private final byte[][] preconstructedPayloads;
 
-    public ControlStream(ConnectionContext context) {
+    public ControlStream(NvConnection parent, ConnectionContext context) {
+        this.parent = parent;
         this.context = context;
 
         switch (context.serverGeneration) {
@@ -367,10 +370,17 @@ public class ControlStream implements ConnectionStatusListener, InputPacketSende
         final ByteBuffer lossStatsBuf = ByteBuffer.allocate(payloadLengths[IDX_LOSS_STATS])
                                                   .order(ByteOrder.LITTLE_ENDIAN);
         lossStatsFuture = Util.scheduleAtFixedDelay(() -> {
+            boolean success = false;
             try {
                 sendLossStats(lossStatsBuf);
                 lossCountSinceLastReport = 0;
-            } catch (IOException ignored) {}
+                success = true;
+            } catch (IOException ignored) {
+            } finally {
+                if (!success) {
+                    parent.stop();
+                }
+            }
         }, LOSS_REPORT_INTERVAL_MS, LOSS_REPORT_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
