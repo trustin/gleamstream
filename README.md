@@ -64,7 +64,7 @@ Usage: gleamstream [options]
        The desired bitrate in Mbps
        Default: 30
     -connect
-       Connects to the specified IP address or host (e.g. -c 192.168.0.100)
+       Connects to the specified IP address or hostname (e.g. -c 192.168.0.100)
     -fps
        The frame rate of the video stream (must be 60 or 30)
        Default: 60
@@ -72,10 +72,12 @@ Usage: gleamstream [options]
        Prints the usage
     -hevc
        Use HEVC video codec
+    -list
+       Lists the applications available in the specified IP address or hostname
     -localaudio
        Makes the audio stay in the server
     -pair
-       Pairs with the specified IP address or host (e.g. -p 192.168.0.100)
+       Pairs with the specified IP address or hostname (e.g. -p 192.168.0.100)
     -quit
        Quits the running application in the specified IP address or hostname
     -res
@@ -94,6 +96,12 @@ PIN on your server as instructed:
 
 ```bash
 ./gleamstream -pair 192.168.0.100
+```
+
+To list the applications available in the server, use the `-list` command:
+
+```bash
+../gleamstream -list 192.168.0.100
 ```
 
 To terminate an existing session in the server, use the `-quit` command:
@@ -122,7 +130,7 @@ GleamStream has built-in gamepad mappings for Xbox 360 and DualShock 4 controlle
 your gamepad to your machine and pressing a button should be all you need to do for playing with a gamepad.
 
 The default mappings are copied to `~/.config/gleamstream/gamepads.example.json` as an example. You may want to copy it to
-`~/.config/gleamstream/gamepads.json` and modify an existing one or add a new one.
+`~/.config/gleamstream/gamepads.json` and edit it to modify an existing mapping or add a new one.
 
 I must admit I can't test all O/S and controller combinations and there's always a chance where the built-in mappings do not
 work as expected. Please feel free to [create an issue](https://github.com/trustin/gleamstream/issues/new) or send a pull
