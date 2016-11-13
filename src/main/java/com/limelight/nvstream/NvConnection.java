@@ -178,7 +178,7 @@ public class NvConnection {
         }
 
         if (h.getPairState(serverInfo) != PairingManager.PairState.PAIRED) {
-            throw panicWithoutTrace("Not paired with the server. Please pair with '-pair " +
+            throw panicWithoutTrace("Not paired with the server. Please pair using '-pair " +
                                     context.serverAddress.getHostAddress() + "' option first.");
         }
 
