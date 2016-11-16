@@ -24,6 +24,10 @@ final class ControllerBatchingBlock {
         rightStickY = initialPacket.rightStickY;
     }
 
+    private boolean checkDirs(byte currentVal, byte newVal, int dirIndex) {
+        return checkDirs((short) (currentVal & 0xFF), (short) (newVal & 0xFF), dirIndex);
+    }
+
     private boolean checkDirs(short currentVal, short newVal, int dirIndex) {
         if (currentVal == newVal) {
             return true;
