@@ -69,4 +69,55 @@ class MultiControllerPacket extends InputPacket {
     int packetLength() {
         return PACKET_LENGTH;
     }
+
+    final boolean merge(MultiControllerPacket packet, byte[] axisDirs) {
+        if (buttonFlags != packet.buttonFlags ||
+            controllerNumber != packet.controllerNumber ||
+            !checkDirs(axisDirs, leftTrigger, packet.leftTrigger, 0) ||
+            !checkDirs(axisDirs, rightTrigger, packet.rightTrigger, 1) ||
+            !checkDirs(axisDirs, leftStickX, packet.leftStickX, 2) ||
+            !checkDirs(axisDirs, leftStickY, packet.leftStickY, 3) ||
+            !checkDirs(axisDirs, rightStickX, packet.rightStickX, 4) ||
+            !checkDirs(axisDirs, rightStickY, packet.rightStickY, 5)) {
+            return false;
+        }
+
+        controllerNumber = packet.controllerNumber;
+        leftTrigger = packet.leftTrigger;
+        rightTrigger = packet.rightTrigger;
+        leftStickX = packet.leftStickX;
+        leftStickY = packet.leftStickY;
+        rightStickX = packet.rightStickX;
+        rightStickY = packet.rightStickY;
+        return true;
+    }
+
+    private static boolean checkDirs(byte[] axisDirs, byte currentVal, byte newVal, int dirIndex) {
+        return checkDirs(axisDirs, (short) (currentVal & 0xFF), (short) (newVal & 0xFF), dirIndex);
+    }
+
+    private static boolean checkDirs(byte[] axisDirs, short currentVal, short newVal, int dirIndex) {
+        if (currentVal == newVal) {
+            return true;
+        }
+
+        // We want to send a packet if we've now zeroed an axis
+        if (newVal == 0) {
+            return false;
+        }
+
+        if (axisDirs[dirIndex] == 0) {
+            if (newVal < currentVal) {
+                axisDirs[dirIndex] = -1;
+            } else {
+                axisDirs[dirIndex] = 1;
+            }
+        } else if (axisDirs[dirIndex] == -1) {
+            return newVal < currentVal;
+        } else if (newVal < currentVal) {
+            return false;
+        }
+
+        return true;
+    }
 }
