@@ -582,7 +582,7 @@ final class MainWindow {
                             leftStickX, leftStickY, rightStickX, rightStickY);
                 }
 
-                // Quit when OSD is visible and BACK+START is pressed on the first gamepad.
+                // Quit when OSD is visible and BACK+START is pressed.
                 if (showOsd) {
                     if (buttonFlags == (BACK_FLAG | PLAY_FLAG) &&
                         (lastGamepadButtonFlags == 0 ||
@@ -593,7 +593,7 @@ final class MainWindow {
                     }
                 }
 
-                // Toggle OSD when SPECIAL+Y or BACK+Y is pressed on the first gamepad.
+                // Toggle OSD when SPECIAL+Y or BACK+Y is pressed.
                 if (buttonFlags == (SPECIAL_BUTTON_FLAG | Y_FLAG) &&
                     (lastGamepadButtonFlags == 0 ||
                      lastGamepadButtonFlags == SPECIAL_BUTTON_FLAG) ||
